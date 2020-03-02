@@ -37,7 +37,7 @@ class SemanticPerturbations:
     # returns: the gradient of the image w.r.t correct label
     def _get_gradients(self, image, net_out, label):
         score = net_out[0][label]
-        score.backward()
+        score.backward(retain_graph=True)
         #return image.grad
 
     # classifies the input image 
@@ -74,26 +74,34 @@ class SemanticPerturbations:
     def render_image(self):
         img = self._model()
         # Visualize the initial guess
-        img = torch.pow(img, 1.0/2.2) # add .data to stop PyTorch from complaining
+        eps = 1e-6
+        img = torch.pow(img + eps, 1.0/2.2) # add .data to stop PyTorch from complaining
         img = torch.nn.functional.interpolate(img.T.unsqueeze(0), size=(224,224), mode='bilinear')
         img.retain_grad()
         return img
 
     def attack(self):
         # classify 
-        learning_rate = 1e-2
+        learning_rate = 1e-4
         img = self.render_image()
-        for _ in range(10):
+        plt.imsave("out_images/base.png", img[0].T.data.cpu().numpy())
+        for i in range(10):
             pred, net_out = self.classify(img, 5)
             # get gradients
             self._get_gradients(img.cpu(), net_out, pred)
             for obj in self.objects:
                 obj.vertices += obj.vertices.grad/torch.norm(obj.vertices.grad) * learning_rate
-            self.translation = self.translation + self.translation.grad/torch.norm(self.translation.grad) * learning_rate
+            if self.translation.grad is None:
+                print("No translation grad")
+            else:
+                print("Hey!")
+                self.translation = self.translation + self.translation.grad/torch.norm(self.translation.grad) * learning_rate
+                self.translation.retain_grad()
             img = self.render_image()
+            plt.imsave("out_images/img_test_" + str(i) + ".png", img[0].T.data.cpu().numpy())
         final_pred, net_out = self.classify(img, 5)
         print(final_pred)
-        plt.imsave("img_test.png", img[0].T.data.cpu().numpy())
+        #plt.imsave("img_test.png", img[0].T.data.cpu().numpy())
 
 v = SemanticPerturbations(vgg16, "teapot/teapot.obj")
 v.attack()
