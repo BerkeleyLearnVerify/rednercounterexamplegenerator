@@ -11,7 +11,6 @@ import requests
 import json
 import numpy as np
 
-resnet18 = torchvision.models.resnet18(pretrained=True)
 vgg16 = vgg.vgg16(pretrained=True)
 
 def set_grad(var):
@@ -19,7 +18,7 @@ def set_grad(var):
         var.grad = grad
     return hook
 
-#the below method was taken, with approval, from Rehan Durrani's work at https://github.com/harbor-ml/modelzoo/
+#the below method was sampled, with approval, from Rehan Durrani's work at https://github.com/harbor-ml/modelzoo/
 def get_label_names(filename):
     with open(filename, 'r') as f:
         detect_labels = {
@@ -50,8 +49,8 @@ class SemanticPerturbations:
                                                 intensity = torch.tensor((20000.0, 30000.0, 20000.0), device = pyredner.get_device()))
     # image: the torch variable holding the image
     # net_out: the output of the framework on the image
-    # label: the label of the image
-    # returns: the gradient of the image w.r.t correct label
+    # label: an image label (given as an integer index)
+    # returns: the gradient of the image w.r.t the given label
     def _get_gradients(self, image, net_out, label):
         score = net_out[0][label]
         score.backward(retain_graph=True)
@@ -60,21 +59,28 @@ class SemanticPerturbations:
     # classifies the input image 
     # image: np array of input image
     # label: correct class label for image
-    # gradients: flag indicating whether to return grad of image
-    # with respect to correct class label
     def classify(self, image, label):
         self.framework.eval()
+        #transform image before classifying by standardizing values
         mean, std = self.framework_params["mean"], self.framework_params["std"]
         normalize = transforms.Normalize(mean, std)
         image = normalize(image.cpu()[0])
-        #image = image.cpu()
         image = image.unsqueeze(0)
-        print(image.shape)
+
+        #forward pass
         fwd = self.framework.forward(image)
-        prediction_idx = int(torch.argmax(fwd[0]))
-        prediction = self.label_names[prediction_idx]
-        print(prediction)
+        
+        #classification via softmax
+        probs = torch.nn.functional.softmax(fwd[0], dim=0).data.numpy()
+        top3 = np.argsort(probs)[-3:][::-1]
+        labels = [(self.label_names[i], probs[i]) for i in top3]
+        print(labels)
+        prediction_idx = top3[0]
+        
+        #prediction_idx = int(torch.argmax(fwd[0]))
+        #prediction = self.label_names[prediction_idx] 
         return prediction_idx, fwd
+
     # You might need to combine the detector and the renderer into one class...this will enable you to retrieve gradients of the placement w.r.t the input stuff
 
     # model the scene based on current instance params
@@ -107,18 +113,20 @@ class SemanticPerturbations:
         img.retain_grad()
         return img
 
+    # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
+    # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
     def attack(self):
         # classify 
-        learning_rate = 10
+        learning_rate = 5
         img = self.render_image()
         plt.imsave("out_images/base.png", img[0].T.data.cpu().numpy())
         for i in range(25):
-            pred, net_out = self.classify(img, 5)
+            pred, net_out = self.classify(img, 899)
             # get gradients
-            self._get_gradients(img.cpu(), net_out, pred)
+            self._get_gradients(img.cpu(), net_out, 899)
             for obj in self.objects:
-                obj.vertices += obj.vertices.grad/torch.norm(obj.vertices.grad) * learning_rate
-            #self.translation = self.translation + self.translation.grad/torch.norm(self.translation.grad) * learning_rate
+                obj.vertices -= obj.vertices.grad/torch.norm(obj.vertices.grad) * learning_rate
+            #self.translation = self.translation - self.translation.grad/torch.norm(self.translation.grad) * learning_rate
             #self.translation.retain_grad()
             img = self.render_image()
             plt.imsave("out_images/img_test_" + str(i) + ".png", img[0].T.data.cpu().numpy())
@@ -129,11 +137,13 @@ class SemanticPerturbations:
 
 
 #for vgg16, shape is (224,224)
-#imagenet_url = "https://gist.githubusercontent.com/yrevar/942d3a0ac09ec9e5eb3a/raw/238f720ff059c1f82f368259d1ca4ffa5dd8f9f5/imagenet1000_clsidx_to_labels.txt"
-#coco_url = "https://gist.githubusercontent.com/RehanSD/6f74a9992848e25658e091148ee20e17/raw/fae1f9f3ee0c3eb20ca9829e99cd8b616f22fa45/cocolabels.json"
 imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 
-#v = SemanticPerturbations(resnet18, "teapot/teapot.obj", dims = (256,256), label_names = get_label_names(coco_url))
 v = SemanticPerturbations(vgg16, "teapot/teapot.obj", dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params)
 v.attack()
+
+
+#a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
+#and get the index to label mapping (the last two steps are only needed(if not trained on imagenet, which is provided above),
+#now, you have a fully generic library that can read in any .obj file, classify the image, and induce a misclassification through the attack alg
