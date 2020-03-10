@@ -117,20 +117,30 @@ class SemanticPerturbations:
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
     def attack(self):
         # classify 
-        learning_rate = 5
+        learning_rate = 0.01
         img = self.render_image()
         plt.imsave("out_images/base.png", img[0].T.data.cpu().numpy())
-        for i in range(25):
+        for i in range(5):
             pred, net_out = self.classify(img, 899)
             # get gradients
             self._get_gradients(img.cpu(), net_out, 899)
+            eps = 1e-6
+            print("Hello")
+            #print(len(self.objects))
+            count = 0
             for obj in self.objects:
-                obj.vertices -= obj.vertices.grad/torch.norm(obj.vertices.grad) * learning_rate
+                if not torch.isnan(obj.vertices.grad).any() and torch.isfinite(obj.vertices.grad).all():
+                    obj.vertices -= obj.vertices.grad/(torch.norm(obj.vertices.grad) + eps) * learning_rate
+                if torch.isnan(obj.vertices).any():
+                    #print(obj.vertices)
+                    #print(obj.vertices.grad)
+                    count += 1
+            print(count)
             #self.translation = self.translation - self.translation.grad/torch.norm(self.translation.grad) * learning_rate
             #self.translation.retain_grad()
             img = self.render_image()
             plt.imsave("out_images/img_test_" + str(i) + ".png", img[0].T.data.cpu().numpy())
-        final_pred, net_out = self.classify(img, 5)
+        final_pred, net_out = self.classify(img, 899)
         print(final_pred)
         #print(class_names[final_pred])
         #plt.imsave("img_test.png", img[0].T.data.cpu().numpy())
@@ -139,8 +149,9 @@ class SemanticPerturbations:
 #for vgg16, shape is (224,224)
 imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
-
-v = SemanticPerturbations(vgg16, "teapot/teapot.obj", dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params)
+#obj_filename = "teapot/teapot.obj"
+obj_filename = "/home/lakshya/ShapeNetCore.v2/02958343/8fadf13734ff86b5f9e6f9c7735c6b41/models/model_normalized.obj"
+v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params)
 v.attack()
 
 
