@@ -27,53 +27,26 @@ def get_label_names(filename):
     return detect_labels
 
 class SemanticPerturbations:
-    def __init__(self, framework, filename, dims, label_names, normalize_params, envmap_filename):
+    def __init__(self, framework, filename, dims, label_names, normalize_params):
         self.framework = framework
         self.image_dims = dims
         self.label_names = label_names
         self.framework_params = normalize_params
         
-        # self.objects = pyredner.load_obj(filename, return_objects=True)
-        self.material_map, mesh_list, self.light_map = pyredner.load_obj(filename)
-        for _, mesh in mesh_list:
-            mesh.normals = pyredner.compute_vertex_normal(mesh.vertices, mesh.indices)
+        self.objects = pyredner.load_obj(filename, return_objects=True)
+        self.camera = pyredner.automatic_camera_placement(self.objects, resolution=(512,512))
         vertices = []
-        for _, mesh in mesh_list:
-            vertices.append(mesh.vertices)
-            mesh.vertices = Variable(mesh.vertices, requires_grad=True)
-            mesh.vertices.retain_grad()
-
-        material_id_map = {}
-        self.materials = []
-        count = 0
-        for key, value in self.material_map.items():
-            material_id_map[key] = count
-            count += 1
-            self.materials.append(value)
-        
-        self.shapes = []
-        for mtl_name, mesh in mesh_list:
-            #assert(mesh.normal_indices is None)
-            self.shapes.append(pyredner.Shape(\
-                vertices = mesh.vertices,
-                indices = mesh.indices,
-                material_id = material_id_map[mtl_name],
-                uvs = mesh.uvs,
-                normals = mesh.normals,
-                uv_indices = mesh.uv_indices))
-        
-        self.camera = pyredner.automatic_camera_placement(self.shapes, resolution=(512,512))
+        for obj in self.objects:
+            vertices.append(obj.vertices)
+            obj.vertices = Variable(obj.vertices, requires_grad=True)
+            obj.vertices.retain_grad()
+         
         # Compute the center of the teapot
         self.center = torch.mean(torch.cat(vertices), 0)
         self.translation = torch.tensor([0., 0.0, 0.], device = pyredner.get_device(), requires_grad=True)
         self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
         self.light = pyredner.PointLight(position = (self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
                                                 intensity = torch.tensor((20000.0, 30000.0, 20000.0), device = pyredner.get_device()))
-        self.envmap = pyredner.imread(envmap_filename)
-        if pyredner.get_use_gpu():
-            self.envmap = self.envmap.cuda(device = pyredner.get_device())
-        self.envmap = pyredner.EnvironmentMap(self.envmap)
-
     # image: the torch variable holding the image
     # net_out: the output of the framework on the image
     # label: an image label (given as an integer index)
@@ -119,20 +92,12 @@ class SemanticPerturbations:
         print(rotation_matrix)
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
-
-        # for _, mesh in self.mesh_list:
-        #     mesh.vertices = (mesh.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
-        #     mesh.vertices.retain_grad()
-        #     mesh.normals = pyredner.compute_vertex_normal(mesh.vertices, mesh.indices)
-
-        for shape in self.shapes:
-            shape.vertices = (shape.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
-            shape.vertices.retain_grad()
-            shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
-
-
+        for obj in self.objects:
+            obj.vertices = (obj.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
+            obj.vertices.retain_grad()
+            obj.normals = pyredner.compute_vertex_normal(obj.vertices, obj.indices)
         # Assemble the 3D scene.
-        scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials, area_lights=[], envmap=self.envmap)
+        scene = pyredner.Scene(camera = self.camera, objects = self.objects)
         # Render the scene.
         img = pyredner.render_deferred(scene, lights=[self.light])
         img.retain_grad()
@@ -152,31 +117,24 @@ class SemanticPerturbations:
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
     def attack(self):
         # classify 
-        learning_rate = .01
+        learning_rate = 0.01
         img = self.render_image()
         plt.imsave("out_images/base.png", img[0].T.data.cpu().numpy())
-        for i in range(25):
+        for i in range(5):
             pred, net_out = self.classify(img, 899)
             # get gradients
             self._get_gradients(img.cpu(), net_out, 899)
             eps = 1e-6
             print("Hello")
-            #print(len(self.mesh_list))
+            #print(len(self.objects))
             count = 0
-            for shape in self.shapes:
-                if not torch.isfinite(shape.vertices.grad).any() or torch.isnan(shape.vertices.grad).any():
+            for obj in self.objects:
+                if not torch.isnan(obj.vertices.grad).any() and torch.isfinite(obj.vertices.grad).all():
+                    obj.vertices -= obj.vertices.grad/(torch.norm(obj.vertices.grad) + eps) * learning_rate
+                if torch.isnan(obj.vertices).any():
+                    #print(obj.vertices)
+                    #print(obj.vertices.grad)
                     count += 1
-                else:
-                    shape.vertices -= shape.vertices.grad/(torch.norm(shape.vertices.grad) + eps) * learning_rate
-            
-            # for _, mesh in self.mesh_list:
-            #     if not torch.isnan(mesh.vertices.grad).any() and torch.isfinite(mesh.vertices.grad).all():
-            #         mesh.vertices -= mesh.vertices.grad/(torch.norm(mesh.vertices.grad) + eps) * learning_rate
-            #     if torch.isnan(mesh.vertices).any():
-            #         #print(mesh.vertices)
-            #         #print(mesh.vertices.grad)
-            #         count += 1
-            
             print(count)
             #self.translation = self.translation - self.translation.grad/torch.norm(self.translation.grad) * learning_rate
             #self.translation.retain_grad()
@@ -189,13 +147,12 @@ class SemanticPerturbations:
 
 
 #for vgg16, shape is (224,224)
-envmap_filename = "lighting/sunsky.exr"
 imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
-obj_filename = "teapot/teapot.obj"
+#obj_filename = "teapot/teapot.obj"
 #obj_filename = "/home/lakshya/ShapeNetCore.v2/02958343/8fadf13734ff86b5f9e6f9c7735c6b41/models/model_normalized.obj"
 obj_filename = "/home/lakshya/ShapeNetCore.v2/02958343/8fc3cde1054cc1aaceb4167db4d0e4de/models/model_normalized.obj"
-v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, envmap_filename=envmap_filename)
+v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params)
 v.attack()
 
 
