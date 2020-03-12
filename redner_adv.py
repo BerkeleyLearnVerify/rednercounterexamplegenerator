@@ -150,9 +150,9 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack(self):
+    def attack_FGSM(self):
         # classify 
-        learning_rate = .01
+        eps = 1e-5
         img = self.render_image()
         plt.imsave("out_images/base.png", img[0].T.data.cpu().numpy())
         for i in range(25):
@@ -167,15 +167,7 @@ class SemanticPerturbations:
                 if not torch.isfinite(shape.vertices.grad).any() or torch.isnan(shape.vertices.grad).any():
                     count += 1
                 else:
-                    shape.vertices -= shape.vertices.grad/(torch.norm(shape.vertices.grad) + eps) * learning_rate
-            # for _, mesh in self.mesh_list:
-            #     if not torch.isnan(mesh.vertices.grad).any() and torch.isfinite(mesh.vertices.grad).all():
-            #         mesh.vertices -= mesh.vertices.grad/(torch.norm(mesh.vertices.grad) + eps) * learning_rate
-            #     if torch.isnan(mesh.vertices).any():
-            #         #print(mesh.vertices)
-            #         #print(mesh.vertices.grad)
-            #         count += 1
-            
+                    shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + eps)) * eps
             print(count)
             #self.translation = self.translation - self.translation.grad/torch.norm(self.translation.grad) * learning_rate
             #self.translation.retain_grad()
@@ -188,14 +180,14 @@ class SemanticPerturbations:
 
 
 #for vgg16, shape is (224,224)
-envmap_filename = "lighting/pink_gradient.png"
+envmap_filename = "lighting/blue_white.png"
 imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 obj_filename = "teapot/teapot.obj"
 #obj_filename = "/home/lakshya/ShapeNetCore.v2/02958343/8fadf13734ff86b5f9e6f9c7735c6b41/models/model_normalized.obj"
 obj_filename = "/home/lakshya/ShapeNetCore.v2/02958343/8fc3cde1054cc1aaceb4167db4d0e4de/models/model_normalized.obj"
 v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, envmap_filename=envmap_filename)
-v.attack()
+v.attack_FGSM()
 
 
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
