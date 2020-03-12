@@ -69,11 +69,9 @@ class SemanticPerturbations:
         self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
         self.light = pyredner.PointLight(position = (self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
                                                 intensity = torch.tensor((20000.0, 30000.0, 20000.0), device = pyredner.get_device()))
-        self.envmap = pyredner.imread(envmap_filename)
-        if pyredner.get_use_gpu():
-            self.envmap = self.envmap.cuda(device = pyredner.get_device())
-        self.envmap = pyredner.EnvironmentMap(self.envmap)
-
+        background = pyredner.imread(envmap_filename)
+        self.background = background.to(pyredner.get_device())
+        
     # image: the torch variable holding the image
     # net_out: the output of the framework on the image
     # label: an image label (given as an integer index)
@@ -130,21 +128,23 @@ class SemanticPerturbations:
             shape.vertices.retain_grad()
             shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
 
-
         # Assemble the 3D scene.
-        scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials, area_lights=[], envmap=self.envmap)
+        scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
         # Render the scene.
-        img = pyredner.render_deferred(scene, lights=[self.light])
-        img.retain_grad()
+        img = pyredner.render_deferred(scene, lights=[self.light], alpha=True)
         return img
 
     # render the image properly and downsample it to the right dimensions
     def render_image(self):
         img = self._model()
+        alpha = img[:, :, 3:4]
+        img = img[:, :, :3] * alpha + self.background * (1 - alpha)
         # Visualize the initial guess
         eps = 1e-6
         img = torch.pow(img + eps, 1.0/2.2) # add .data to stop PyTorch from complaining
         img = torch.nn.functional.interpolate(img.T.unsqueeze(0), size=self.image_dims, mode='bilinear')
+        print(torch.max(img))
+        print(torch.min(img))
         img.retain_grad()
         return img
 
@@ -168,7 +168,6 @@ class SemanticPerturbations:
                     count += 1
                 else:
                     shape.vertices -= shape.vertices.grad/(torch.norm(shape.vertices.grad) + eps) * learning_rate
-            
             # for _, mesh in self.mesh_list:
             #     if not torch.isnan(mesh.vertices.grad).any() and torch.isfinite(mesh.vertices.grad).all():
             #         mesh.vertices -= mesh.vertices.grad/(torch.norm(mesh.vertices.grad) + eps) * learning_rate
@@ -189,7 +188,7 @@ class SemanticPerturbations:
 
 
 #for vgg16, shape is (224,224)
-envmap_filename = "lighting/sunsky.exr"
+envmap_filename = "lighting/pink_gradient.png"
 imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 obj_filename = "teapot/teapot.obj"
