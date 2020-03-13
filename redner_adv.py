@@ -10,6 +10,7 @@ import zipfile
 import requests
 import json
 import numpy as np
+import argparse
 
 vgg16 = vgg.vgg16(pretrained=True)
 
@@ -27,7 +28,7 @@ def get_label_names(filename):
     return detect_labels
 
 class SemanticPerturbations:
-    def __init__(self, framework, filename, dims, label_names, normalize_params, envmap_filename):
+    def __init__(self, framework, filename, dims, label_names, normalize_params, background):
         self.framework = framework
         self.image_dims = dims
         self.label_names = label_names
@@ -61,7 +62,8 @@ class SemanticPerturbations:
                 uvs = mesh.uvs,
                 normals = mesh.normals,
                 uv_indices = mesh.uv_indices))
-        
+
+
         self.camera = pyredner.automatic_camera_placement(self.shapes, resolution=(512,512))
         # Compute the center of the teapot
         self.center = torch.mean(torch.cat(vertices), 0)
@@ -69,7 +71,7 @@ class SemanticPerturbations:
         self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
         self.light = pyredner.PointLight(position = (self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
                                                 intensity = torch.tensor((20000.0, 30000.0, 20000.0), device = pyredner.get_device()))
-        background = pyredner.imread(envmap_filename)
+        background = pyredner.imread(background)
         self.background = background.to(pyredner.get_device())
         
     # image: the torch variable holding the image
@@ -99,7 +101,6 @@ class SemanticPerturbations:
         probs = torch.nn.functional.softmax(fwd[0], dim=0).data.numpy()
         top3 = np.argsort(probs)[-3:][::-1]
         labels = [(self.label_names[i], probs[i]) for i in top3]
-        print(labels)
         prediction_idx = top3[0]
         
         #prediction_idx = int(torch.argmax(fwd[0]))
@@ -113,8 +114,6 @@ class SemanticPerturbations:
         # Get the rotation matrix from Euler angles
         rotation_matrix = Variable(pyredner.gen_rotate_matrix(self.euler_angles), requires_grad=True)
         rotation_matrix.retain_grad()
-        print("Rotation")
-        print(rotation_matrix)
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
 
@@ -150,50 +149,51 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label):
+    def attack_FGSM(self, label, out_dir):
         # classify 
-        eps = 1e-5
+        eps = .0001
         img = self.render_image()
-        plt.imsave("out_images/base.png", img[0].T.data.cpu().numpy())
+        plt.imsave(out_dir + "/base.png", img[0].T.data.cpu().numpy())
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0)
-        for i in range(25):
+        for i in range(5):
             optimizer.zero_grad()
             pred, net_out = self.classify(img, label)
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
-            eps = 1e-6
+            delta = 1e-6
             print("Hello")
-            #print(len(self.mesh_list))
-            count = 0
+            inf_count = 0
+            nan_count = 0
             for shape in self.shapes:
-                if not torch.isfinite(shape.vertices.grad).all() or torch.isnan(shape.vertices.grad).any():
-                    count += 1
+                if not torch.isfinite(shape.vertices.grad).all():
+                    inf_count += 1
+                elif torch.isnan(shape.vertices.grad).any():
+                    nan_count += 1
                 else:
                     #subtract because we are trying to decrease the classification score of the label
-                    #shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + eps)) * eps
-                    shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + eps)) * eps
-            print(count)
+                    shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
             #self.translation = self.translation - self.translation.grad/torch.norm(self.translation.grad) * learning_rate
             #self.translation.retain_grad()
             #optimizer.step()
             img = self.render_image()
-            plt.imsave("out_images/img_test_" + str(i) + ".png", img[0].T.data.cpu().numpy())
+            plt.imsave(out_dir + "/out_" + str(i) + ".png", img[0].T.data.cpu().numpy())
         final_pred, net_out = self.classify(img, 899)
-        print(final_pred)
-        #print(class_names[final_pred])
-        #plt.imsave("img_test.png", img[0].T.data.cpu().numpy())
 
 
 #for vgg16, shape is (224,224)
-label = 734
-envmap_filename = "lighting/blue_white.png"
+parser = argparse.ArgumentParser()
+parser.add_argument('--id', type=str)
+parser.add_argument('--hashcode', type=str)
+args = parser.parse_args()
+label = 895
+background = "lighting/blue_white.png"
 imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 obj_filename = "teapot/teapot.obj"
-#obj_filename = "/home/lakshya/ShapeNetCore.v2/02958343/8fadf13734ff86b5f9e6f9c7735c6b41/models/model_normalized.obj"
-obj_filename = "/home/lakshya/ShapeNetCore.v2/02958343/8fc3cde1054cc1aaceb4167db4d0e4de/models/model_normalized.obj"
-v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, envmap_filename=envmap_filename)
-v.attack_FGSM(label)
+obj_filename = "/home/lakshya/ShapeNetCore.v2/" + args.id + "/" + args.hashcode + "/models/model_normalized.obj"
+out_dir = "out/" + args.id + "_" + args.hashcode
+v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background)
+v.attack_FGSM(label, out_dir))
 
 
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
