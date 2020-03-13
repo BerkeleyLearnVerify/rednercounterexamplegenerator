@@ -67,7 +67,7 @@ class SemanticPerturbations:
         self.camera = pyredner.automatic_camera_placement(self.shapes, resolution=(512,512))
         # Compute the center of the teapot
         self.center = torch.mean(torch.cat(vertices), 0)
-        self.translation = torch.tensor([0., 0.0, 0.], device = pyredner.get_device(), requires_grad=True)
+        self.translation = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
         self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
         self.light = pyredner.PointLight(position = (self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
                                                 intensity = torch.tensor((20000.0, 30000.0, 20000.0), device = pyredner.get_device()))
@@ -112,8 +112,8 @@ class SemanticPerturbations:
     # model the scene based on current instance params
     def _model(self):
         # Get the rotation matrix from Euler angles
-        rotation_matrix = Variable(pyredner.gen_rotate_matrix(self.euler_angles), requires_grad=True)
-        rotation_matrix.retain_grad()
+        rotation_matrix = pyredner.gen_rotate_matrix(self.euler_angles)
+        #rotation_matrix.retain_grad()
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
 
@@ -170,8 +170,11 @@ class SemanticPerturbations:
                 else:
                     #subtract because we are trying to decrease the classification score of the label
                     shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
-            #self.translation = self.translation - self.translation.grad/torch.norm(self.translation.grad) * learning_rate
+            #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
+            #print(self.euler_angles)
+            #self.euler_angles = self.euler_angles - torch.sign(self.euler_angles.grad/torch.norm(self.euler_angles.grad) + delta) * eps
+            #self.euler_angles.retain_grad()
             #optimizer.step()
             img = self.render_image()
             plt.imsave(out_dir + "/out_" + str(i) + ".png", img[0].T.data.cpu().numpy())
@@ -189,7 +192,7 @@ imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 obj_filename = "teapot/teapot.obj"
 obj_filename = "/home/lakshya/ShapeNetCore.v2/" + args.id + "/" + args.hashcode + "/models/model_normalized.obj"
-out_dir = "out/" + args.id + "_" + args.hashcode
+out_dir = "out/" + args.id + "/" + args.hashcode
 v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background)
 v.attack_FGSM(label, out_dir)
 
