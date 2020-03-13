@@ -142,8 +142,6 @@ class SemanticPerturbations:
         eps = 1e-6
         img = torch.pow(img + eps, 1.0/2.2) # add .data to stop PyTorch from complaining
         img = torch.nn.functional.interpolate(img.T.unsqueeze(0), size=self.image_dims, mode='bilinear')
-        print(torch.max(img))
-        print(torch.min(img))
         img.retain_grad()
         return img
 
@@ -193,7 +191,7 @@ obj_filename = "teapot/teapot.obj"
 obj_filename = "/home/lakshya/ShapeNetCore.v2/" + args.id + "/" + args.hashcode + "/models/model_normalized.obj"
 out_dir = "out/" + args.id + "_" + args.hashcode
 v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background)
-v.attack_FGSM(label, out_dir))
+v.attack_FGSM(label, out_dir)
 
 
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
