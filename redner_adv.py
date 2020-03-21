@@ -72,11 +72,11 @@ class SemanticPerturbations:
         if pose == 'forward':
             self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
         elif pose == 'top':
-            self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+            self.euler_angles = torch.tensor([0.35, 0., 0.], device = pyredner.get_device(), requires_grad=True)
         elif pose == 'left':
-            self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+            self.euler_angles = torch.tensor([0., 0.50, 0.], device = pyredner.get_device(), requires_grad=True)
         elif pose == 'right':
-            self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+            self.euler_angles = torch.tensor([0., -0.50, 0.], device = pyredner.get_device(), requires_grad=True)
 
         self.light = pyredner.PointLight(position = (self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
                                                 intensity = torch.tensor((20000.0, 30000.0, 20000.0), device = pyredner.get_device()))
@@ -216,7 +216,7 @@ background = "lighting/blue_white.png"
 imagenet_filename = "imagenet_labels.json"
 
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
-obj_filename = "~/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
+obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
 
 if attack_type is None:
     out_dir = "out/benign/" + obj_id 
