@@ -218,7 +218,7 @@ imagenet_filename = "imagenet_labels.json"
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 obj_filename = "~/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
 
-if attack_type is not None:
+if attack_type is None:
     out_dir = "out/benign/" + obj_id 
 else:
     out_dir = "out/" + attack_type + "/" + obj_id
