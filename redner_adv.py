@@ -28,7 +28,7 @@ def get_label_names(filename):
     return detect_labels
 
 class SemanticPerturbations:
-    def __init__(self, framework, filename, dims, label_names, normalize_params, background):
+    def __init__(self, framework, filename, dims, label_names, normalize_params, background, pose):
         self.framework = framework
         self.image_dims = dims
         self.label_names = label_names
@@ -68,9 +68,19 @@ class SemanticPerturbations:
         # Compute the center of the teapot
         self.center = torch.mean(torch.cat(vertices), 0)
         self.translation = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
-        self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+
+        if pose == 'forward':
+            self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+        elif pose == 'top':
+            self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+        elif pose == 'left':
+            self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+        elif pose == 'right':
+            self.euler_angles = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
+
         self.light = pyredner.PointLight(position = (self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
                                                 intensity = torch.tensor((20000.0, 30000.0, 20000.0), device = pyredner.get_device()))
+        
         background = pyredner.imread(background)
         self.background = background.to(pyredner.get_device())
         
@@ -114,14 +124,9 @@ class SemanticPerturbations:
         # Get the rotation matrix from Euler angles
         rotation_matrix = pyredner.gen_rotate_matrix(self.euler_angles)
         #rotation_matrix.retain_grad()
+
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
-
-        # for _, mesh in self.mesh_list:
-        #     mesh.vertices = (mesh.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
-        #     mesh.vertices.retain_grad()
-        #     mesh.normals = pyredner.compute_vertex_normal(mesh.vertices, mesh.indices)
-
         for shape in self.shapes:
             shape.vertices = (shape.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
             shape.vertices.retain_grad()
@@ -134,34 +139,44 @@ class SemanticPerturbations:
         return img
 
     # render the image properly and downsample it to the right dimensions
-    def render_image(self):
+    def render_image(self, out_dir=None, filename=None):
         img = self._model()
         alpha = img[:, :, 3:4]
         img = img[:, :, :3] * alpha + self.background * (1 - alpha)
+
         # Visualize the initial guess
         eps = 1e-6
         img = torch.pow(img + eps, 1.0/2.2) # add .data to stop PyTorch from complaining
         img = torch.nn.functional.interpolate(img.T.unsqueeze(0), size=self.image_dims, mode='bilinear')
         img.retain_grad()
+        
+        #save image
+        if out_dir is not None and filename is not None:
+            plt.imsave(out_dir + "/" + filename, img[0].T.data.cpu().numpy())
+        
         return img
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir):
+    def attack_FGSM(self, label, out_dir, filename):
         # classify 
         eps = .0001
-        img = self.render_image()
-        plt.imsave(out_dir + "/base.png", img[0].T.data.cpu().numpy())
-        optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0)
+        img = self.render_image(out_dir=out_dir, filename=filename + ".png")
+
+        # only there to zero out gradients.
+        optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
+
         for i in range(5):
             optimizer.zero_grad()
             pred, net_out = self.classify(img, label)
+
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
             delta = 1e-6
-            print("Hello")
             inf_count = 0
             nan_count = 0
+
+            #attack each shape's vertices
             for shape in self.shapes:
                 if not torch.isfinite(shape.vertices.grad).all():
                     inf_count += 1
@@ -170,14 +185,15 @@ class SemanticPerturbations:
                 else:
                     #subtract because we are trying to decrease the classification score of the label
                     shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
+
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
             #self.euler_angles = self.euler_angles - torch.sign(self.euler_angles.grad/torch.norm(self.euler_angles.grad) + delta) * eps
             #self.euler_angles.retain_grad()
             #optimizer.step()
-            img = self.render_image()
-            plt.imsave(out_dir + "/out_" + str(i) + ".png", img[0].T.data.cpu().numpy())
+            
+            img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
         final_pred, net_out = self.classify(img, 899)
 
 
@@ -185,16 +201,36 @@ class SemanticPerturbations:
 parser = argparse.ArgumentParser()
 parser.add_argument('--id', type=str)
 parser.add_argument('--hashcode', type=str)
+parser.add_argument('--label', type=int)
+parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right'])
+parser.add_argument('--attack', type=str, choices=['FGSM'])
+
 args = parser.parse_args()
-label = 895
+label = args.label
+attack_type = args.attack
+pose = args.pose
+hashcode = args.hashcode
+obj_id = args.id
+
 background = "lighting/blue_white.png"
 imagenet_filename = "imagenet_labels.json"
+
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
-obj_filename = "teapot/teapot.obj"
-obj_filename = "/home/lakshya/ShapeNetCore.v2/" + args.id + "/" + args.hashcode + "/models/model_normalized.obj"
-out_dir = "out/" + args.id + "/" + args.hashcode
-v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background)
-v.attack_FGSM(label, out_dir)
+obj_filename = "~/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
+
+if attack_type is not None:
+    out_dir = "out/benign/" + obj_id 
+else:
+    out_dir = "out/" + attack_type + "/" + obj_id
+
+#out_dir += "/" + hashcode
+
+v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
+#v.attack_FGSM(label, out_dir)
+v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
+
+if attack_type == "FGSM":
+    v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
 
 
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
