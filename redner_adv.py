@@ -197,40 +197,44 @@ class SemanticPerturbations:
         final_pred, net_out = self.classify(img, 899)
 
 
-#for vgg16, shape is (224,224)
-parser = argparse.ArgumentParser()
-parser.add_argument('--id', type=str)
-parser.add_argument('--hashcode', type=str)
-parser.add_argument('--label', type=int)
-parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right'])
-parser.add_argument('--attack', type=str, choices=['FGSM'])
+#######################
+#### USAGE EXAMPLE ####
+#######################
 
-args = parser.parse_args()
-label = args.label
-attack_type = args.attack
-pose = args.pose
-hashcode = args.hashcode
-obj_id = args.id
+# #for vgg16, shape is (224,224)
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--id', type=str)
+# parser.add_argument('--hashcode', type=str)
+# parser.add_argument('--label', type=int)
+# parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right'])
+# parser.add_argument('--attack', type=str, choices=['FGSM'])
 
-background = "lighting/blue_white.png"
-imagenet_filename = "imagenet_labels.json"
+# args = parser.parse_args()
+# label = args.label
+# attack_type = args.attack
+# pose = args.pose
+# hashcode = args.hashcode
+# obj_id = args.id
 
-vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
-obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
+# background = "lighting/blue_white.png"
+# imagenet_filename = "imagenet_labels.json"
 
-if attack_type is None:
-    out_dir = "out/benign/" + obj_id 
-else:
-    out_dir = "out/" + attack_type + "/" + obj_id
+# vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
+# obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
 
-#out_dir += "/" + hashcode
+# if attack_type is None:
+#     out_dir = "out/benign/" + obj_id 
+# else:
+#     out_dir = "out/" + attack_type + "/" + obj_id
 
-v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
-#v.attack_FGSM(label, out_dir)
-v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
+# #out_dir += "/" + hashcode
 
-if attack_type == "FGSM":
-    v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
+# v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
+# #v.attack_FGSM(label, out_dir)
+# v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
+
+# if attack_type == "FGSM":
+#     v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
 
 
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
