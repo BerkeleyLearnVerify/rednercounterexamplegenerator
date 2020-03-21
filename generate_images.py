@@ -17,6 +17,8 @@ hashcodes = []
 for line in hashcode_file.readlines():
     hashcodes += [line.strip("\n")]
 
+hashcodes = hashcodes[:25]
+
 obj_id = args.id
 label = args.label
 attack_type = args.attack
@@ -36,12 +38,14 @@ for hashcode in hashcodes:
     for pose in ['forward', 'top', 'left', 'right']:
         obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
-        v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
-        if attack_type is None:
-            v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
-        elif attack_type == "FGSM":
-            v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
-
+        try:
+            v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
+            if attack_type is None:
+                v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
+            elif attack_type == "FGSM":
+                v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
+        except:
+            continue
 
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
 #and get the index to label mapping (the last two steps are only needed(if not trained on imagenet, which is provided above),
