@@ -17,8 +17,6 @@ hashcodes = []
 for line in hashcode_file.readlines():
     hashcodes += [line.strip("\n")]
 
-hashcodes = hashcodes[:25]
-
 obj_id = args.id
 label = args.label
 attack_type = args.attack
