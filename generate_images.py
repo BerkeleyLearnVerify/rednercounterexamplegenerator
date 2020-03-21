@@ -12,7 +12,7 @@ parser.add_argument('--attack', type=str, choices=['FGSM'])
 
 args = parser.parse_args()
 
-hashcode_file = open(args.hashcode_file, 'r').readlines()
+hashcode_file = open(args.hashcode_file, 'r')
 hashcodes = []
 for line in hashcode_file.readlines():
     hashcodes += [line.strip("\n")]
