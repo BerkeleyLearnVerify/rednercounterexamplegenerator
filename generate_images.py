@@ -22,7 +22,6 @@ hashcodes = hashcodes[:25]
 obj_id = args.id
 label = args.label
 attack_type = args.attack
-pose = args.pose
 
 background = "lighting/blue_white.png"
 imagenet_filename = "imagenet_labels.json"
@@ -36,7 +35,7 @@ vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([
 
 for hashcode in hashcodes:
     for pose in ['forward', 'top', 'left', 'right']:
-        obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
+        obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
         try:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
@@ -45,6 +44,7 @@ for hashcode in hashcodes:
             elif attack_type == "FGSM":
                 v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
         except:
+            print("Error, skipping " + hashcode + ", pose " + pose)
             continue
 
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
