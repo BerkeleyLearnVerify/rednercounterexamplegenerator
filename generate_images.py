@@ -1,11 +1,12 @@
 from redner_adv import *
 import argparse
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--id', type=str)
 parser.add_argument('--hashcode_file', type=str)
 parser.add_argument('--label', type=int)
-# parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right'])
+parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right', 'all'], default='all')
 parser.add_argument('--attack', type=str, choices=['FGSM'])
 
 #for vgg16, shape is (224,224)
@@ -21,18 +22,24 @@ obj_id = args.id
 label = args.label
 attack_type = args.attack
 
-background = "lighting/blue_white.png"
-imagenet_filename = "imagenet_labels.json"
+pose = args.pose
+if pose == 'all':
+    poses = ['forward', 'top', 'left', 'right']
+else:
+    poses = [pose]
+
+background = "/home/lakshya/redner_adv_experiments/lighting/blue_white.png"
+imagenet_filename = "/home/lakshya/redner_adv_experiments/imagenet_labels.json"
 
 if attack_type is None:
-    out_dir = "out/benign/" + obj_id 
+    out_dir = "/home/lakshya/redner_adv_experiments/out/benign/" + obj_id 
 else:
-    out_dir = "out/" + attack_type + "/" + obj_id
+    out_dir = "/home/lakshya/redner_adv_experiments/out/" + attack_type + "/" + obj_id
 
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 
 for hashcode in hashcodes:
-    for pose in ['forward', 'top', 'left', 'right']:
+    for pose in poses:
         obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
         try:
@@ -41,7 +48,8 @@ for hashcode in hashcodes:
                 v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
             elif attack_type == "FGSM":
                 v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
-        except:
+        except Exception as e:
+            print(e)
             print("Error, skipping " + hashcode + ", pose " + pose)
             continue
 
