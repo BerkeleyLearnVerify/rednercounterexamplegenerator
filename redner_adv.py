@@ -16,6 +16,7 @@ vgg16 = vgg.vgg16(pretrained=True)
 
 def set_grad(var):
     def hook(grad):
+        grad[grad != grad] = 0
         var.grad = grad
     return hook
 
@@ -123,13 +124,13 @@ class SemanticPerturbations:
     def _model(self):
         # Get the rotation matrix from Euler angles
         rotation_matrix = pyredner.gen_rotate_matrix(self.euler_angles)
-        #rotation_matrix.retain_grad()
-
+        self.euler_angles.retain_grad()
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
         for shape in self.shapes:
             shape.vertices = (shape.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
             shape.vertices.retain_grad()
+            shape.vertices.register_hook(set_grad(shape.vertices))
             shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
 
         # Assemble the 3D scene.
@@ -185,12 +186,11 @@ class SemanticPerturbations:
                 else:
                     #subtract because we are trying to decrease the classification score of the label
                     shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
-
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
-            #self.euler_angles = self.euler_angles - torch.sign(self.euler_angles.grad/torch.norm(self.euler_angles.grad) + delta) * eps
-            #self.euler_angles.retain_grad()
+            self.euler_angles.data -= torch.sign(self.euler_angles.grad/torch.norm(self.euler_angles.grad) + delta) * eps
+            print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
             
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
