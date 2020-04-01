@@ -49,7 +49,6 @@ for hashcode in hashcodes:
                 v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
             elif attack_type == "FGSM":
                 v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
-            
             elif attack_type == "PGD":
                 v.attack_PGD(label, out_dir, filename=hashcode + '_' + pose)
         except Exception as e:
