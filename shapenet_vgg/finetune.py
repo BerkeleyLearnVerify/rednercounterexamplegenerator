@@ -69,8 +69,8 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
 
-            epoch_loss = running_loss / len(dataloaders[phase].dataset)
-            epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
+            epoch_loss = running_loss / (len(dataloaders[phase]) * dataloaders[phase].batch_size)
+            epoch_acc = running_corrects.double() / (len(dataloaders[phase]) * dataloaders[phase].batch_size)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
@@ -107,9 +107,9 @@ print(model_ft)
 shape_dataset = ShapeNetRednerDataset('/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/benign',
                         transforms.Compose([
                             transforms.ToTensor(),
-                            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+                            transforms.Normalize([0.6109, 0.7387, 0.7765],
+                                                 [0.2715, 0.3066, 0.3395]),
                         ]))
-
 
 # Stratified train-val split
 dataset_labels = shape_dataset.labels
