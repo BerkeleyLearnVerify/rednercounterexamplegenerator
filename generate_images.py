@@ -7,7 +7,7 @@ parser.add_argument('--id', type=str)
 parser.add_argument('--hashcode_file', type=str)
 parser.add_argument('--label', type=int)
 parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right', 'all'], default='all')
-parser.add_argument('--attack', type=str, choices=['FGSM'])
+parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD'])
 
 #for vgg16, shape is (224,224)
 
@@ -36,6 +36,7 @@ if attack_type is None:
 else:
     out_dir = "/home/lakshya/redner_adv_experiments/out/" + attack_type + "/" + obj_id
 
+#NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
 
 for hashcode in hashcodes:
@@ -48,6 +49,9 @@ for hashcode in hashcodes:
                 v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
             elif attack_type == "FGSM":
                 v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
+            
+            elif attack_type == "PGD":
+                v.attack_PGD(label, out_dir, filename=hashcode + '_' + pose)
         except Exception as e:
             print(e)
             print("Error, skipping " + hashcode + ", pose " + pose)
