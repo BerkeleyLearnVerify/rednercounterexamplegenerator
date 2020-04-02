@@ -97,7 +97,7 @@ class SemanticPerturbations:
     # classifies the input image 
     # image: np array of input image
     # label: correct class label for image
-    def classify(self, image, label):
+    def classify(self, image):
         self.framework.eval()
         #transform image before classifying by standardizing values
         mean, std = self.framework_params["mean"], self.framework_params["std"]
@@ -112,6 +112,7 @@ class SemanticPerturbations:
         probs = torch.nn.functional.softmax(fwd[0], dim=0).data.numpy()
         top3 = np.argsort(probs)[-3:][::-1]
         labels = [(self.label_names[i], probs[i]) for i in top3]
+        print("Top 3: ", labels)
         prediction_idx = top3[0]
         
         #prediction_idx = int(torch.argmax(fwd[0]))
@@ -205,7 +206,7 @@ class SemanticPerturbations:
 
         for i in range(5):
             optimizer.zero_grad()
-            pred, net_out = self.classify(img, label)
+            pred, net_out = self.classify(img)
 
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
@@ -234,7 +235,7 @@ class SemanticPerturbations:
             #optimizer.step()
             
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
-        final_pred, net_out = self.classify(img, 899)
+        final_pred, net_out = self.classify(img)
 
 
 #######################
