@@ -11,8 +11,13 @@ import requests
 import json
 import numpy as np
 import argparse
+import torch.nn as nn
 
+NUM_CLASSES=12
 vgg16 = vgg.vgg16(pretrained=True)
+num_ftrs = vgg16.classifier[6].in_features
+vgg16.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
+vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
 
 def set_grad(var):
     def hook(grad):
@@ -166,7 +171,7 @@ class SemanticPerturbations:
 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
-
+        print("CLASSIFYING BENIGN")
         for i in range(5):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)

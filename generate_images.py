@@ -53,6 +53,7 @@ for hashcode in hashcodes:
             elif attack_type == "PGD":
                 v.attack_PGD(label, out_dir, filename=hashcode + '_' + pose)
         except Exception as e:
+            print("ERROR")
             print(e)
             print("Error, skipping " + hashcode + ", pose " + pose)
             continue
