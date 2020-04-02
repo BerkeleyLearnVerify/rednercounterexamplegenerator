@@ -44,6 +44,8 @@ for hashcode in hashcodes:
     for pose in poses:
         obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
+        #v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
+        #v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
         try:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
             if attack_type is None:

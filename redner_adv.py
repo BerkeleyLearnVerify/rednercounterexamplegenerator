@@ -14,7 +14,7 @@ import argparse
 import torch.nn as nn
 
 NUM_CLASSES=12
-vgg16 = vgg.vgg16(pretrained=True)
+vgg16 = vgg.vgg16()
 num_ftrs = vgg16.classifier[6].in_features
 vgg16.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
 vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
@@ -114,9 +114,13 @@ class SemanticPerturbations:
         fwd = self.framework.forward(image)
         
         #classification via softmax
-        probs = torch.nn.functional.softmax(fwd[0], dim=0).data.numpy()
-        top3 = np.argsort(probs)[-3:][::-1]
-        labels = [(self.label_names[i], probs[i]) for i in top3]
+        probs, top3 = torch.topk(fwd, 3, 1, True, True)
+        top3 = top3[0]
+        probs = probs[0]
+        print([str(idx) + ", " + str(label.item()) for idx, label in enumerate(top3)])
+        #probs = torch.nn.functional.softmax(fwd[0], dim=0).data.numpy()
+        #top3 = np.argsort(probs)[-3:][::-1]
+        labels = [(self.label_names[label.item()], probs[idx].item()) for idx, label in enumerate(top3)]
         print("Top 3: ", labels)
         prediction_idx = top3[0]
         
@@ -143,6 +147,7 @@ class SemanticPerturbations:
         scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
         # Render the scene.
         img = pyredner.render_deferred(scene, lights=[self.light], alpha=True)
+        
         return img
 
     # render the image properly and downsample it to the right dimensions
@@ -165,7 +170,7 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir, filename, eps=0.0001):
+    def attack_FGSM(self, label, out_dir, filename, eps=0.001):
         # classify 
         img = self.render_image(out_dir=out_dir, filename=filename + ".png")
 
@@ -194,8 +199,8 @@ class SemanticPerturbations:
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
-            self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
-            print("rotation grad: ", self.euler_angles.grad)
+            self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps*10
+            #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
             
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
@@ -236,7 +241,7 @@ class SemanticPerturbations:
             self.euler_angles.data -= torch.clamp(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta) * lr, -epsilon, epsilon)
             
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
-            print("rotation grad: ", self.euler_angles.grad)
+            #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
             
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
