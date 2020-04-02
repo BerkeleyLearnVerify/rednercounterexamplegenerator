@@ -169,7 +169,7 @@ class SemanticPerturbations:
 
         for i in range(5):
             optimizer.zero_grad()
-            pred, net_out = self.classify(img, label)
+            pred, net_out = self.classify(img)
 
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
@@ -194,7 +194,7 @@ class SemanticPerturbations:
             #optimizer.step()
             
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
-        final_pred, net_out = self.classify(img, 899)
+        final_pred, net_out = self.classify(img)
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
