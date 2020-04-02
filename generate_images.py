@@ -3,8 +3,8 @@ import argparse
 import os
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--id', type=str)
-parser.add_argument('--hashcode_file', type=str)
+parser.add_argument('--id', type=str, help="the shapenet/imagenet ID of the class")
+parser.add_argument('--hashcode_file', type=str, help="a text file with a list of shapenet hashcodes")
 parser.add_argument('--label', type=int)
 parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right', 'all'], default='all')
 parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD'])
@@ -37,7 +37,8 @@ else:
     out_dir = "/home/lakshya/redner_adv_experiments/out/" + attack_type + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
-vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
+#changed!
+vgg_params = {'mean': torch.tensor([0.6109, 0.7387, 0.7765]), 'std': torch.tensor([0.2715, 0.3066, 0.3395])}
 
 for hashcode in hashcodes:
     for pose in poses:
