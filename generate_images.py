@@ -29,7 +29,7 @@ else:
     poses = [pose]
 
 background = "/home/lakshya/redner_adv_experiments/lighting/blue_white.png"
-imagenet_filename = "/home/lakshya/redner_adv_experiments/imagenet_labels.json"
+imagenet_filename = "/home/lakshya/redner_adv_experiments/class_labels.json"
 
 if attack_type is None:
     out_dir = "/home/lakshya/redner_adv_experiments/out/benign/" + obj_id 
