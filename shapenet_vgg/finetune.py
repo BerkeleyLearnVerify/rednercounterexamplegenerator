@@ -15,6 +15,39 @@ from sklearn.model_selection import train_test_split
 from dataset import ShapeNetRednerDataset
 
 
+class AccuracyTracker(object):
+
+    def __init__(self, num_classes, k, class_labels=None):
+        self.totals = np.zeros((num_classes,))
+        self.counts = np.zeros((num_classes, k))
+        if class_labels == None:
+            class_labels = [i for i in range(num_classes)]
+        assert num_classes == len(class_labels)
+        self.class_labels = list(class_labels)
+
+    def update(self, labels, topkpreds):
+        """labels is a length `batch_size` vector of labels (indices).
+        topkpreds is a size (`batch_size`, `k`) matrix of top-k predictions.
+        """
+        np.add.at(self.totals, labels, 1) # increment label counts
+        matches = np.equal(topkpreds, labels[:,np.newaxis])
+        for i, l in enumerate(labels):
+            # top-1 match counts for top-2 and top-3
+            self.counts[l,:] += np.cumsum(matches[i,:])
+
+    def show(self):
+        row_format = "{:>12} " * (len(self.class_labels) + 2) # total column
+        headers = ["top-k \ class"] + self.class_labels + ["overall"]
+        print(row_format.format(*headers))
+        overall = np.sum(self.counts, axis=0) / np.sum(self.totals)
+        acc = np.concatenate([self.counts / self.totals[:,np.newaxis],
+                              overall[np.newaxis,:]], axis=0)
+
+        acc = np.around(acc, 4)
+        for r in range(self.counts.shape[1]):
+            print(row_format.format(r + 1, *acc[:, r]))
+
+
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
         for param in model.parameters():
@@ -28,6 +61,13 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+
+    classes = dataloaders['train'].dataset.classes
+
+    acc_trackers = {
+        'train': AccuracyTracker(12, 3, classes),
+        'val': AccuracyTracker(12, 3, classes)
+    }
 
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
@@ -57,9 +97,8 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
                     # Get model outputs and calculate loss
                     outputs = model(inputs)
                     loss = criterion(outputs, labels)
-
                     _, preds = torch.max(outputs, 1)
-
+                    _, topkpreds = torch.topk(outputs, 3, 1, True, True)
                     # backward + optimize only if in training phase
                     if phase == 'train':
                         loss.backward()
@@ -69,10 +108,13 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
 
+                acc_trackers[phase].update(labels.data.cpu().numpy(),
+                                           topkpreds.data.cpu().numpy())
+
             epoch_loss = running_loss / (len(dataloaders[phase]) * dataloaders[phase].batch_size)
             epoch_acc = running_corrects.double() / (len(dataloaders[phase]) * dataloaders[phase].batch_size)
-
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+            acc_trackers[phase].show()
 
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
@@ -117,7 +159,8 @@ dataset_labels = shape_dataset.labels
 train_idx, val_idx = train_test_split(np.arange(len(dataset_labels)),
                                       test_size=0.2,
                                       shuffle=True,
-                                      stratify=dataset_labels)
+                                      stratify=dataset_labels,
+                                      random_state=100) # DO NOT CHANGE
 
 train_sampler = torch.utils.data.SubsetRandomSampler(train_idx)
 val_sampler = torch.utils.data.SubsetRandomSampler(val_idx)
@@ -156,7 +199,8 @@ else:
 optimizer_ft = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
 criterion = nn.CrossEntropyLoss()
 
-
 model_ft, hist = train_model(model_ft, {'train': shape_train_dataloader,
-                                        'val': shape_val_dataloader
-}, criterion, optimizer_ft, num_epochs=20)
+                                        'val': shape_val_dataloader },
+                             criterion, optimizer_ft, num_epochs=20)
+
+torch.save(model_ft.state_dict(), 'model_ft.pt')
