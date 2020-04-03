@@ -14,7 +14,7 @@ import argparse
 import torch.nn as nn
 
 NUM_CLASSES=12
-vgg16 = vgg.vgg16()
+vgg16 = vgg.vgg16(pretrained=True)
 num_ftrs = vgg16.classifier[6].in_features
 vgg16.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
 vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
@@ -114,15 +114,14 @@ class SemanticPerturbations:
         fwd = self.framework.forward(image)
         
         #classification via softmax
-        probs, top3 = torch.topk(fwd, 3, 1, True, True)
-        top3 = top3[0]
+        probs, top5 = torch.topk(fwd, 5, 1, True, True)
+        top5 = top5[0]
         probs = probs[0]
-        print([str(idx) + ", " + str(label.item()) for idx, label in enumerate(top3)])
         #probs = torch.nn.functional.softmax(fwd[0], dim=0).data.numpy()
         #top3 = np.argsort(probs)[-3:][::-1]
-        labels = [(self.label_names[label.item()], probs[idx].item()) for idx, label in enumerate(top3)]
-        print("Top 3: ", labels)
-        prediction_idx = top3[0]
+        labels = [(self.label_names[label.item()], probs[idx].item()) for idx, label in enumerate(top5)]
+        print("Top 5: ", labels)
+        prediction_idx = top5[0]
         
         #prediction_idx = int(torch.argmax(fwd[0]))
         #prediction = self.label_names[prediction_idx] 
@@ -137,12 +136,14 @@ class SemanticPerturbations:
         self.euler_angles.retain_grad()
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
+        vertices = []
         for shape in self.shapes:
             shape.vertices = (shape.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
             shape.vertices.retain_grad()
             shape.vertices.register_hook(set_grad(shape.vertices))
             shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
-
+            vertices.append(shape.vertices)
+        self.center = torch.mean(torch.cat(vertices), 0)
         # Assemble the 3D scene.
         scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
         # Render the scene.
@@ -152,7 +153,13 @@ class SemanticPerturbations:
 
     # render the image properly and downsample it to the right dimensions
     def render_image(self, out_dir=None, filename=None):
+        dummy_img = self._model()
+
+        #honestly dont know if this makes a difference, but...
+        self.euler_angles.data = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
         img = self._model()
+        #just meant to prevent rotations from being stacked onto one another with the above line
+
         alpha = img[:, :, 3:4]
         img = img[:, :, :3] * alpha + self.background * (1 - alpha)
 
@@ -165,22 +172,20 @@ class SemanticPerturbations:
         #save image
         if out_dir is not None and filename is not None:
             plt.imsave(out_dir + "/" + filename, img[0].T.data.cpu().numpy())
-        
+
         return img
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
     def attack_FGSM(self, label, out_dir, filename, eps=0.001):
         # classify 
-        img = self.render_image(out_dir=out_dir, filename=filename + ".png")
-
+        img = self.render_image(out_dir=out_dir, filename=filename + ".png") 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
         print("CLASSIFYING BENIGN")
         for i in range(5):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
-
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
             delta = 1e-6
@@ -199,8 +204,8 @@ class SemanticPerturbations:
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
-            self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps*10
-            #print("rotation grad: ", self.euler_angles.grad)
+            self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps * 100
+            print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
             
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
