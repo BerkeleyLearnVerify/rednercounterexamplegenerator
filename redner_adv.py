@@ -173,8 +173,8 @@ class SemanticPerturbations:
         #save image
         if out_dir is not None and filename is not None:
             plt.imsave(out_dir + "/" + filename, img[0].T.data.cpu().numpy())
-
-        return img
+        
+        return img.permute(0,1,3,2)
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
