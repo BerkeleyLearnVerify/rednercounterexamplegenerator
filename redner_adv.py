@@ -138,11 +138,12 @@ class SemanticPerturbations:
         # shift back to the original space, then apply the translation.
         vertices = []
         for shape in self.shapes:
-            shape.vertices = (shape.vertices - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
+            shape_v = shape.vertices.clone().detach()
+            shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
             shape.vertices.retain_grad()
             shape.vertices.register_hook(set_grad(shape.vertices))
             shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
-            vertices.append(shape.vertices)
+            vertices.append(shape.vertices.clone().detach())
         self.center = torch.mean(torch.cat(vertices), 0)
         # Assemble the 3D scene.
         scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
@@ -177,7 +178,7 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir, filename, eps=0.001):
+    def attack_FGSM(self, label, out_dir, filename, eps=0.0005):
         # classify 
         img = self.render_image(out_dir=out_dir, filename=filename + ".png") 
         # only there to zero out gradients.
