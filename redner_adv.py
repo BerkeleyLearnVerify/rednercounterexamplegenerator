@@ -178,7 +178,7 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir, filename, eps=0.0005):
+    def attack_FGSM(self, label, out_dir, filename, eps=0.001, vertex_attack=True, pose_attack=True):
         # classify 
         img = self.render_image(out_dir=out_dir, filename=filename + ".png") 
         # only there to zero out gradients.
@@ -194,19 +194,23 @@ class SemanticPerturbations:
             nan_count = 0
 
             #attack each shape's vertices
-            for shape in self.shapes:
-                if not torch.isfinite(shape.vertices.grad).all():
-                    inf_count += 1
-                elif torch.isnan(shape.vertices.grad).any():
-                    nan_count += 1
-                else:
-                    #subtract because we are trying to decrease the classification score of the label
-                    shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
+            if vertex_attack:
+                for shape in self.shapes:
+                    if not torch.isfinite(shape.vertices.grad).all():
+                        inf_count += 1
+                    elif torch.isnan(shape.vertices.grad).any():
+                        nan_count += 1
+                    else:
+                        #subtract because we are trying to decrease the classification score of the label
+                        shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
+            
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
-            self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps * 100
-            print("rotation grad: ", self.euler_angles.grad)
+            if pose_attack:
+                self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps * 50
+            
+            #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
             
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
@@ -214,7 +218,7 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_PGD(self, label, out_dir, filename, epsilon=1.0, lr=0.0001):
+    def attack_PGD(self, label, out_dir, filename, epsilon=1.0, lr=0.0001, vertex_attack=True, pose_attack=True):
         # classify 
         img = self.render_image(out_dir=out_dir, filename=filename + ".png")
         # only there to zero out gradients.
@@ -229,22 +233,24 @@ class SemanticPerturbations:
             delta = 1e-6
             inf_count = 0
             nan_count = 0
-
-            #attack each shape's vertices
-            for shape in self.shapes:
-                if not torch.isfinite(shape.vertices.grad).all():
-                    inf_count += 1
-                elif torch.isnan(shape.vertices.grad).any():
-                    nan_count += 1
-                else:
-                    #subtract because we are trying to decrease the classification score of the label
-                    shape.vertices -= torch.clamp(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta) * lr, -epsilon, epsilon)
+            
+            if vertex_attack: 
+                #attack each shape's vertices
+                for shape in self.shapes:
+                    if not torch.isfinite(shape.vertices.grad).all():
+                        inf_count += 1
+                    elif torch.isnan(shape.vertices.grad).any():
+                        nan_count += 1
+                    else:
+                        #subtract because we are trying to decrease the classification score of the label
+                        shape.vertices -= torch.clamp(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta) * lr, -epsilon, epsilon)
 
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
-
-            self.euler_angles.data -= torch.clamp(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta) * lr, -epsilon, epsilon)
+            
+            if pose_attack:
+                self.euler_angles.data -= torch.clamp(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta) * lr, -epsilon, epsilon)
             
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
             #print("rotation grad: ", self.euler_angles.grad)
