@@ -8,7 +8,7 @@ parser.add_argument('--hashcode_file', type=str, help="a text file with a list o
 parser.add_argument('--label', type=int)
 parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right', 'all'], default='all')
 parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD'])
-
+parser.add_argument('--params', type=str, choices=["vertex", "pose", "all"], default="all")
 #for vgg16, shape is (224,224)
 
 args = parser.parse_args()
@@ -27,6 +27,12 @@ if pose == 'all':
     poses = ['forward', 'top', 'left', 'right']
 else:
     poses = [pose]
+
+vertex_attack = args.params is "vertex" or args.params is "all"
+pose_attack = args.params is "pose" or args.params is "all"
+
+print("Vertex Attack: ", vertex_attack)
+print("Pose Attack: ", pose_attack)
 
 background = "/home/lakshya/redner_adv_experiments/lighting/blue_white.png"
 imagenet_filename = "/home/lakshya/redner_adv_experiments/class_labels.json"
@@ -49,9 +55,9 @@ for hashcode in hashcodes:
             if attack_type is None:
                 v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
             elif attack_type == "FGSM":
-                v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
+                v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose, steps=7, vertex_eps=0.001, pose_eps=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
             elif attack_type == "PGD":
-                v.attack_PGD(label, out_dir, filename=hashcode + '_' + pose)
+                v.attack_PGD(label, out_dir, filename=hashcode + '_' + pose, steps=7, vertex_epsilon=1.0, pose_epsilon=1.0, vertex_lr=0.001, pose_lr=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
             print("\n\n\n")
         except Exception as e:
             print("ERROR")

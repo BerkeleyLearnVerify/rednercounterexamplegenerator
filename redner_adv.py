@@ -178,13 +178,13 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir, filename, eps=0.001, vertex_attack=True, pose_attack=True):
+    def attack_FGSM(self, label, out_dir, filename, steps=5, vertex_eps=0.001, pose_eps=0.05, vertex_attack=True, pose_attack=True):
         # classify 
         img = self.render_image(out_dir=out_dir, filename=filename + ".png") 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
         print("CLASSIFYING BENIGN")
-        for i in range(5):
+        for i in range(steps):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
             # get gradients
@@ -202,13 +202,13 @@ class SemanticPerturbations:
                         nan_count += 1
                     else:
                         #subtract because we are trying to decrease the classification score of the label
-                        shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
+                        shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * vertex_eps
             
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
             if pose_attack:
-                self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps * 50
+                self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * pose_eps
             
             #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
@@ -218,13 +218,14 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_PGD(self, label, out_dir, filename, epsilon=1.0, lr=0.0001, vertex_attack=True, pose_attack=True):
+    def attack_PGD(self, label, out_dir, filename, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, vertex_lr=0.001, pose_lr=0.05, 
+            vertex_attack=True, pose_attack=True):
         # classify 
         img = self.render_image(out_dir=out_dir, filename=filename + ".png")
         # only there to zero out gradients.
-        optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
+        optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0)
 
-        for i in range(5):
+        for i in range(steps):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
 
@@ -243,14 +244,14 @@ class SemanticPerturbations:
                         nan_count += 1
                     else:
                         #subtract because we are trying to decrease the classification score of the label
-                        shape.vertices -= torch.clamp(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta) * lr, -epsilon, epsilon)
+                        shape.vertices -= torch.clamp(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta) * vertex_lr, -vertex_epsilon, vertex_epsilon)
 
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
             
             if pose_attack:
-                self.euler_angles.data -= torch.clamp(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta) * lr, -epsilon, epsilon)
+                self.euler_angles.data -= torch.clamp(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta) * pose_lr, -pose_epsilon, pose_epsilon)
             
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
             #print("rotation grad: ", self.euler_angles.grad)
