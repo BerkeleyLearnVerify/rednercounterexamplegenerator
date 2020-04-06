@@ -154,6 +154,9 @@ class SemanticPerturbations:
 
     # render the image properly and downsample it to the right dimensions
     def render_image(self, out_dir=None, filename=None):
+        if (out_dir is None) is not (filename is None):
+            raise Exception("must provide both out dir and filename if you wish to save the image")
+
         dummy_img = self._model()
 
         #honestly dont know if this makes a difference, but...
@@ -178,9 +181,19 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir, filename, steps=5, vertex_eps=0.001, pose_eps=0.05, vertex_attack=True, pose_attack=True):
+    def attack_FGSM(self, label, out_dir=None, save_title=None, steps=5, vertex_eps=0.001, pose_eps=0.05, vertex_attack=True, pose_attack=True):
+        if out_dir is not None and save_title is None:
+            raise Exception("Must provide image title if out dir is provided")
+        elif save_title is not None and out_dir is None:
+            raise Exception("Must provide directory if image is to be saved")
+        
+        if save_title is not None:
+            filename = save_title + ".png"
+        else:
+            filename = save_title
+
         # classify 
-        img = self.render_image(out_dir=out_dir, filename=filename + ".png") 
+        img = self.render_image(out_dir=out_dir, filename=filename) 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
         print("CLASSIFYING BENIGN")
@@ -213,15 +226,34 @@ class SemanticPerturbations:
             #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
             
-            img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
+            if save_title is not None:
+                filename = save_title + "_iter_" + str(i) + ".png"
+            else:
+                filename = save_title
+
+            img = self.render_image(out_dir=out_dir, filename=filename)
+
         final_pred, net_out = self.classify(img)
+        return final_pred, img
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_PGD(self, label, out_dir, filename, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, vertex_lr=0.001, pose_lr=0.05, 
+    def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, vertex_lr=0.001, pose_lr=0.05, 
             vertex_attack=True, pose_attack=True):
-        # classify 
-        img = self.render_image(out_dir=out_dir, filename=filename + ".png")
+
+        if out_dir is not None and save_title is None:
+            raise Exception("Must provide image title if out dir is provided")
+        elif save_title is not None and out_dir is None:
+            raise Exception("Must provide directory if image is to be saved")
+        
+        if save_title is not None:
+            filename = save_title + ".png"
+        else:
+            filename = save_title
+
+        # classify
+        img = self.render_image(out_dir=out_dir, filename=filename)
+        
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0)
 
@@ -256,10 +288,15 @@ class SemanticPerturbations:
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
             #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
-            
-            img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
-        final_pred, net_out = self.classify(img)
+            if save_title is not None:
+                filename = save_title + "_iter_" + str(i) + ".png"
+            else:
+                filename = save_title
 
+            img = self.render_image(out_dir=out_dir, filename=filename)
+        
+        final_pred, net_out = self.classify(img)
+        return final_pred, img
 
 #######################
 #### USAGE EXAMPLE ####

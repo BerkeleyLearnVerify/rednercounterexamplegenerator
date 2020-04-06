@@ -28,8 +28,8 @@ if pose == 'all':
 else:
     poses = [pose]
 
-vertex_attack = args.params is "vertex" or args.params is "all"
-pose_attack = args.params is "pose" or args.params is "all"
+vertex_attack = args.params == "vertex" or args.params == "all"
+pose_attack = args.params == "pose" or args.params == "all"
 
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
@@ -46,7 +46,10 @@ else:
 #changed!
 vgg_params = {'mean': torch.tensor([0.6109, 0.7387, 0.7765]), 'std': torch.tensor([0.2715, 0.3066, 0.3395])}
 
+total_errors = 0
+sample_size = 0
 for hashcode in hashcodes:
+    print(hashcode)
     for pose in poses:
         obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
@@ -54,10 +57,16 @@ for hashcode in hashcodes:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
             if attack_type is None:
                 v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
+                print("\n\n\n")
+                continue
             elif attack_type == "FGSM":
-                v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose, steps=7, vertex_eps=0.001, pose_eps=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
+                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=7, vertex_eps=0.01, pose_eps=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
             elif attack_type == "PGD":
-                v.attack_PGD(label, out_dir, filename=hashcode + '_' + pose, steps=7, vertex_epsilon=1.0, pose_epsilon=1.0, vertex_lr=0.001, pose_lr=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
+                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=7, vertex_epsilon=15.0, pose_epsilon=3.0, vertex_lr=0.005, pose_lr=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
+            total_errors += (pred.item() != label)
+            sample_size += 1
+            print("Total Errors: ", total_errors)
+            print("Sample Size: ", sample_size)
             print("\n\n\n")
         except Exception as e:
             print("ERROR")
@@ -65,6 +74,9 @@ for hashcode in hashcodes:
             print("Error, skipping " + hashcode + ", pose " + pose)
             continue
 
+if attack_type is not None:
+    print("Total number of misclassifications: ", total_errors)
+    print("Error rate: ", total_errors/sample_size)
 #a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image 
 #and get the index to label mapping (the last two steps are only needed(if not trained on imagenet, which is provided above),
 #now, you have a fully generic library that can read in any .obj file, classify the image, and induce a misclassification through the attack alg
