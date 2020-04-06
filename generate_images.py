@@ -60,9 +60,9 @@ for hashcode in hashcodes:
                 print("\n\n\n")
                 continue
             elif attack_type == "FGSM":
-                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=7, vertex_eps=0.01, pose_eps=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
+                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_eps=0.005, pose_eps=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
             elif attack_type == "PGD":
-                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=7, vertex_epsilon=15.0, pose_epsilon=3.0, vertex_lr=0.005, pose_lr=0.05, vertex_attack=vertex_attack, pose_attack=pose_attack)
+                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_epsilon=25.0, pose_epsilon=0.5, vertex_lr=0.01, pose_lr=0.1, vertex_attack=vertex_attack, pose_attack=pose_attack)
             total_errors += (pred.item() != label)
             sample_size += 1
             print("Total Errors: ", total_errors)

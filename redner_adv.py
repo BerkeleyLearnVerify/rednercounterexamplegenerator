@@ -200,6 +200,9 @@ class SemanticPerturbations:
         for i in range(steps):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
+            if pred.item() != label and i != 0:
+                print("misclassification at step ", i)
+                return pred, img
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
             delta = 1e-6
@@ -260,7 +263,9 @@ class SemanticPerturbations:
         for i in range(steps):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
-
+            if pred.item() != label and i != 0:
+                print("misclassification at step ", i)
+                return pred, img
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
             delta = 1e-6
