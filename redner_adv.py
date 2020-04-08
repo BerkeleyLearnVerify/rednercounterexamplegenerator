@@ -147,6 +147,8 @@ class SemanticPerturbations:
                 shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
                 vertices.append(shape.vertices.clone().detach())
         else:
+            import ipdb;
+            ipdb.set_trace()
             for i, shape in enumerate(self.shapes):
                 shape_v = shapes[i]
                 shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
@@ -154,12 +156,10 @@ class SemanticPerturbations:
                 shape.vertices.register_hook(set_grad(shapes[i]))
                 shape.normals = pyredner.compute_vertex_normal(shapes[i], shape.indices)
                 vertices.append(shapes[i])
+
         self.center = torch.mean(torch.cat(vertices), 0)
         # Assemble the 3D scene.
-        if shapes is not None:
-            scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
-        else:
-            scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
+        scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
         # Render the scene.
         img = pyredner.render_deferred(scene, lights=[self.light], alpha=True)
         
@@ -167,6 +167,8 @@ class SemanticPerturbations:
 
     # render the image properly and downsample it to the right dimensions
     def render_image(self, out_dir=None, filename=None, shapes=None):
+        #if (out_dir is None) is not (filename is None):
+        #    raise Exception("must provide both out dir and filename if you wish to save the image")
         dummy_img = self._model()
 
         #honestly dont know if this makes a difference, but...
@@ -191,15 +193,28 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir, filename, eps=0.0005):
+    def attack_FGSM(self, label, out_dir=None, save_title=None, steps=5, vertex_eps=0.001, pose_eps=0.05, vertex_attack=True, pose_attack=True):
+        if out_dir is not None and save_title is None:
+            raise Exception("Must provide image title if out dir is provided")
+        elif save_title is not None and out_dir is None:
+            raise Exception("Must provide directory if image is to be saved")
+        
+        if save_title is not None:
+            filename = save_title + ".png"
+        else:
+            filename = save_title
+
         # classify 
-        img = self.render_image(out_dir=out_dir, filename=filename + ".png") 
+        img = self.render_image(out_dir=out_dir, filename=filename) 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
         print("CLASSIFYING BENIGN")
-        for i in range(5):
+        for i in range(steps):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
+            if pred.item() != label and i != 0:
+                print("misclassification at step ", i)
+                return pred, img
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
             delta = 1e-6
@@ -207,63 +222,103 @@ class SemanticPerturbations:
             nan_count = 0
 
             #attack each shape's vertices
-            for shape in self.shapes:
-                if not torch.isfinite(shape.vertices.grad).all():
-                    inf_count += 1
-                elif torch.isnan(shape.vertices.grad).any():
-                    nan_count += 1
-                else:
-                    #subtract because we are trying to decrease the classification score of the label
-                    shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * eps
+            if vertex_attack:
+                for shape in self.shapes:
+                    if not torch.isfinite(shape.vertices.grad).all():
+                        inf_count += 1
+                    elif torch.isnan(shape.vertices.grad).any():
+                        nan_count += 1
+                    else:
+                        #subtract because we are trying to decrease the classification score of the label
+                        shape.vertices -= torch.sign(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta)) * vertex_eps
+            
             #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             #self.translation.retain_grad()
             #print(self.euler_angles)
-            self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps * 100
-            print("rotation grad: ", self.euler_angles.grad)
+            if pose_attack:
+                self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * pose_eps
+            
+            #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
             
-            img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
+            if save_title is not None:
+                filename = save_title + "_iter_" + str(i) + ".png"
+            else:
+                filename = save_title
+
+            img = self.render_image(out_dir=out_dir, filename=filename)
+
         final_pred, net_out = self.classify(img)
+        return final_pred, img
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_PGD(self, label, out_dir, filename, epsilon=1.0, lr=0.0001):
+    def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0,
+                   vertex_lr=0.001, pose_lr=0.05,
+                   vertex_attack=True, pose_attack=True):
+
+        if out_dir is not None and save_title is None:
+            raise Exception("Must provide image title if out dir is provided")
+        elif save_title is not None and out_dir is None:
+            raise Exception("Must provide directory if image is to be saved")
+
+        if save_title is not None:
+            filename = save_title + ".png"
+        else:
+            filename = save_title
+
         # classify
-        img = self.render_image(out_dir=out_dir, filename=filename + ".png")
+        img = self.render_image(out_dir=out_dir, filename=filename)
+
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0)
-        for i in range(5):
+
+        for i in range(steps):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
-
+            if pred.item() != label and i != 0:
+                print("misclassification at step ", i)
+                return pred, img
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
             delta = 1e-6
             inf_count = 0
             nan_count = 0
 
-            #attack each shape's vertices
-            for shape in self.shapes:
-                if not torch.isfinite(shape.vertices.grad).all():
-                    inf_count += 1
-                elif torch.isnan(shape.vertices.grad).any():
-                    nan_count += 1
-                else:
-                    #subtract because we are trying to decrease the classification score of the label
-                    shape.vertices -= torch.clamp(shape.vertices.grad/(torch.norm(shape.vertices.grad) + delta) * lr, -epsilon, epsilon)
+            if vertex_attack:
+                # attack each shape's vertices
+                for shape in self.shapes:
+                    if not torch.isfinite(shape.vertices.grad).all():
+                        inf_count += 1
+                    elif torch.isnan(shape.vertices.grad).any():
+                        nan_count += 1
+                    else:
+                        # subtract because we are trying to decrease the classification score of the label
+                        shape.vertices -= torch.clamp(
+                            shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr,
+                            -vertex_epsilon, vertex_epsilon)
 
-            #self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
-            #self.translation.retain_grad()
-            #print(self.euler_angles)
+            # self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
+            # self.translation.retain_grad()
+            # print(self.euler_angles)
 
-            self.euler_angles.data -= torch.clamp(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta) * lr, -epsilon, epsilon)
+            if pose_attack:
+                self.euler_angles.data -= torch.clamp(
+                    self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr, -pose_epsilon,
+                    pose_epsilon)
 
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
-            #print("rotation grad: ", self.euler_angles.grad)
-            #optimizer.step()
+            # print("rotation grad: ", self.euler_angles.grad)
+            # optimizer.step()
+            if save_title is not None:
+                filename = save_title + "_iter_" + str(i) + ".png"
+            else:
+                filename = save_title
 
-            img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
+            img = self.render_image(out_dir=out_dir, filename=filename)
+
         final_pred, net_out = self.classify(img)
+        return final_pred, img
 
     def attack_cw(self, label, out_dir, filename, epsilon=1.0, lr=0.0001):
         input = []
@@ -291,10 +346,10 @@ class SemanticPerturbations:
         if clamp_fn == 'tanh':
             # convert to tanh-space, input already int -1 to 1 range, does it make sense to do
             # this as per the reference implementation or can we skip the arctanh?
-            input_var = [torch_arctanh(i.detach()) for i in input]
-            input_orig = [tanh_rescale(i.detach(), -1, 1) for i in input]
+            input_var = [torch_arctanh(i.detach().clone()) for i in input]
+            input_orig = [tanh_rescale(i.detach().clone(), -1, 1) for i in input]
         else:
-            input_var = [i.detach() for i in input]
+            input_var = [i.detach().clone() for i in input]
             input_orig = None
 
         # setup the target variable, we need it to be in one-hot form for the loss function
@@ -402,14 +457,13 @@ class SemanticPerturbations:
 
             if np.argmax(output).item() != label and step != 0:
                 print("misclassification at step ", step)
-                self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(step) + ".png")
-                return
+                img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(step) + ".png")
+                return self.classify(img)
 
+        img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(step) + ".png")
+        return self.classify(img)
             #if step % 250 == 0:
             #    img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(step) + ".png")
-
-
-
 
 #######################
 #### USAGE EXAMPLE ####
