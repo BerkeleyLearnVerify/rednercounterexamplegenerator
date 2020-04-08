@@ -7,7 +7,7 @@ parser.add_argument('--id', type=str, help="the shapenet/imagenet ID of the clas
 parser.add_argument('--hashcode_file', type=str, help="a text file with a list of shapenet hashcodes")
 parser.add_argument('--label', type=int)
 parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right', 'all'], default='all')
-parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD'])
+parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD', 'CW'])
 
 #for vgg16, shape is (224,224)
 
@@ -28,13 +28,13 @@ if pose == 'all':
 else:
     poses = [pose]
 
-background = "/home/lakshya/redner_adv_experiments/lighting/blue_white.png"
-imagenet_filename = "/home/lakshya/redner_adv_experiments/class_labels.json"
+background = "/work/yan.andy4/rednercounterexamplegenerator/lighting/blue_white.png"
+imagenet_filename = "/work/yan.andy4/rednercounterexamplegenerator/class_labels.json"
 
 if attack_type is None:
-    out_dir = "/home/lakshya/redner_adv_experiments/out/benign/" + obj_id 
+    out_dir = "/work/yan.andy4/rednercounterexamplegenerator/out/benign/" + obj_id
 else:
-    out_dir = "/home/lakshya/redner_adv_experiments/out/" + attack_type + "/" + obj_id
+    out_dir = "/work/yan.andy4/rednercounterexamplegenerator/out/" + attack_type + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 #changed!
@@ -42,7 +42,7 @@ vgg_params = {'mean': torch.tensor([0.6109, 0.7387, 0.7765]), 'std': torch.tenso
 
 for hashcode in hashcodes:
     for pose in poses:
-        obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
+        obj_filename = "/work/yan.andy4/rednercounterexamplegenerator/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
         #v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
         #v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
@@ -54,6 +54,8 @@ for hashcode in hashcodes:
                 v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
             elif attack_type == "PGD":
                 v.attack_PGD(label, out_dir, filename=hashcode + '_' + pose)
+            elif attack_type == "CW":
+                v.attack_cw(label, out_dir, filename=hashcode + '_' + pose)
         except Exception as e:
             print("ERROR")
             print(e)

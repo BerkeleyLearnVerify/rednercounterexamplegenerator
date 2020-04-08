@@ -2,8 +2,8 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.models.vgg as vgg
-from torch.autograd import Variable
 import pyredner
+from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import urllib
 import zipfile
@@ -35,7 +35,7 @@ def get_label_names(filename):
 
 class SemanticPerturbations:
     def __init__(self, framework, filename, dims, label_names, normalize_params, background, pose):
-        self.framework = framework
+        self.framework = framework.cuda()
         self.image_dims = dims
         self.label_names = label_names
         self.framework_params = normalize_params
@@ -59,9 +59,10 @@ class SemanticPerturbations:
             self.materials.append(value)
         
         self.shapes = []
+        self.cw_shapes = []
         for mtl_name, mesh in mesh_list:
             #assert(mesh.normal_indices is None)
-            self.shapes.append(pyredner.Shape(\
+            self.shapes.append(pyredner.Shape(
                 vertices = mesh.vertices,
                 indices = mesh.indices,
                 material_id = material_id_map[mtl_name],
@@ -130,35 +131,47 @@ class SemanticPerturbations:
     # You might need to combine the detector and the renderer into one class...this will enable you to retrieve gradients of the placement w.r.t the input stuff
 
     # model the scene based on current instance params
-    def _model(self):
+    def _model(self, shapes=None):
         # Get the rotation matrix from Euler angles
         rotation_matrix = pyredner.gen_rotate_matrix(self.euler_angles)
         self.euler_angles.retain_grad()
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
         vertices = []
-        for shape in self.shapes:
-            shape_v = shape.vertices.clone().detach()
-            shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
-            shape.vertices.retain_grad()
-            shape.vertices.register_hook(set_grad(shape.vertices))
-            shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
-            vertices.append(shape.vertices.clone().detach())
+        if shapes is None:
+            for shape in self.shapes:
+                shape_v = shape.vertices.clone().detach()
+                shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
+                shape.vertices.retain_grad()
+                shape.vertices.register_hook(set_grad(shape.vertices))
+                shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
+                vertices.append(shape.vertices.clone().detach())
+        else:
+            for i, shape in enumerate(self.shapes):
+                shape_v = shapes[i]
+                shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
+                shape.vertices.retain_grad()
+                shape.vertices.register_hook(set_grad(shapes[i]))
+                shape.normals = pyredner.compute_vertex_normal(shapes[i], shape.indices)
+                vertices.append(shapes[i])
         self.center = torch.mean(torch.cat(vertices), 0)
         # Assemble the 3D scene.
-        scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
+        if shapes is not None:
+            scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
+        else:
+            scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
         # Render the scene.
         img = pyredner.render_deferred(scene, lights=[self.light], alpha=True)
         
         return img
 
     # render the image properly and downsample it to the right dimensions
-    def render_image(self, out_dir=None, filename=None):
+    def render_image(self, out_dir=None, filename=None, shapes=None):
         dummy_img = self._model()
 
         #honestly dont know if this makes a difference, but...
         self.euler_angles.data = torch.tensor([0., 0., 0.], device = pyredner.get_device(), requires_grad=True)
-        img = self._model()
+        img = self._model(shapes=shapes)
         #just meant to prevent rotations from being stacked onto one another with the above line
 
         alpha = img[:, :, 3:4]
@@ -172,7 +185,7 @@ class SemanticPerturbations:
         
         #save image
         if out_dir is not None and filename is not None:
-            plt.imsave(out_dir + "/" + filename, img[0].T.data.cpu().numpy())
+            plt.imsave(out_dir + "/" + filename, np.clip(img[0].T.data.cpu().numpy(), 0, 1))
         
         return img.permute(0,1,3,2)
 
@@ -215,11 +228,10 @@ class SemanticPerturbations:
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
     def attack_PGD(self, label, out_dir, filename, epsilon=1.0, lr=0.0001):
-        # classify 
+        # classify
         img = self.render_image(out_dir=out_dir, filename=filename + ".png")
         # only there to zero out gradients.
-        optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0) 
-
+        optimizer = torch.optim.Adam([self.translation, self.euler_angles], lr=0)
         for i in range(5):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
@@ -245,13 +257,158 @@ class SemanticPerturbations:
             #print(self.euler_angles)
 
             self.euler_angles.data -= torch.clamp(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta) * lr, -epsilon, epsilon)
-            
+
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
             #print("rotation grad: ", self.euler_angles.grad)
             #optimizer.step()
-            
+
             img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(i) + ".png")
         final_pred, net_out = self.classify(img)
+
+    def attack_cw(self, label, out_dir, filename, epsilon=1.0, lr=0.0001):
+        input = []
+        for shape in self.shapes:
+            input.append(shape.vertices)
+
+        #input = torch.stack(input)[None]
+        target = torch.tensor([label])
+        batch_size = 1
+
+        # set the lower and upper bounds accordingly
+        lower_bound = np.zeros(batch_size)
+        scale_const = np.ones(batch_size) * 0.01
+        upper_bound = np.ones(batch_size) * 1e10
+
+        def torch_arctanh(x, eps=1e-6):
+            x *= (1. - eps)
+            return (torch.log((1 + x) / (1 - x))) * 0.5
+
+        def tanh_rescale(x, x_min=-1., x_max=1.):
+            return (torch.tanh(x) + 1) * 0.5 * (x_max - x_min) + x_min
+
+        # setup input (image) variable, clamp/scale as necessary
+        clamp_fn = "tanh"
+        if clamp_fn == 'tanh':
+            # convert to tanh-space, input already int -1 to 1 range, does it make sense to do
+            # this as per the reference implementation or can we skip the arctanh?
+            input_var = [torch_arctanh(i.detach()) for i in input]
+            input_orig = [tanh_rescale(i.detach(), -1, 1) for i in input]
+        else:
+            input_var = [i.detach() for i in input]
+            input_orig = None
+
+        # setup the target variable, we need it to be in one-hot form for the loss function
+        target_onehot = torch.zeros(target.size() + (NUM_CLASSES,))
+        target_onehot = target_onehot.cuda()
+        target = target.cuda()
+        target_onehot.scatter_(1, target.unsqueeze(1), 1.)
+        target_var = target_onehot
+
+        # setup the modifier variable, this is the list of variables we are optimizing over
+        #modifier = [torch.zeros(i.size()).float() for i in input_var]
+        #if self.init_rand:
+        #    # Experiment with a non-zero starting point...
+        modifier_var = [torch.zeros(i.size(), requires_grad=True, device="cuda").float() for i in input_var]
+
+        optimizer = torch.optim.Adam(modifier_var, lr=0.0005)
+        scale_const_tensor = torch.from_numpy(scale_const).float()
+        scale_const_var = scale_const_tensor.cuda()
+
+        max_steps = 100
+
+        def reduce_sum(x, keepdim=True):
+            # silly PyTorch, when will you get proper reducing sums/means?
+            for a in reversed(range(1, x.dim())):
+                x = x.sum(a, keepdim=keepdim)
+
+            return x
+
+        def l2_dist(x, y, keepdim=True):
+            d = None
+            for x_i, y_i in zip(x, y):
+                if d is not None:
+                    d += torch.sum(reduce_sum((x_i - y_i) ** 2, keepdim=keepdim))
+                else:
+                    d = torch.sum(reduce_sum((x_i - y_i) ** 2, keepdim=keepdim))
+
+            return d
+
+        def _loss(output, target, dist, scale_const):
+            # compute the probability of the label class versus the maximum other
+            real = (target * output).sum(1)
+            other = ((1. - target) * output - target * 10000.).max(1)[0]
+            targeted = False
+            confidence = 0
+            if targeted:
+                # if targeted, optimize for making the other class most likely
+                loss1 = torch.clamp(other - real + confidence, min=0.)  # equiv to max(..., 0.)
+            else:
+                # if non-targeted, optimize for making this class least likely.
+                loss1 = torch.clamp(real - other + confidence, min=0.)  # equiv to max(..., 0.)
+            loss1 = torch.sum(scale_const * loss1)
+
+            loss2 = dist.sum()
+
+            loss = loss1 + loss2
+            return loss
+
+        def _optimize(optimizer, model, input_var, modifier_var, target_var, scale_const_var,
+                      input_orig=None):
+            # apply modifier and clamp resulting image to keep bounded from clip_min to clip_max
+            if clamp_fn == 'tanh':
+                input_adv = [tanh_rescale(m + i, -1, 1) for m, i in zip(modifier_var, input_var)]
+            else:
+                input_adv = [torch.clamp(m + i, -1, 1) for m, i in zip(modifier_var, input_var)]
+
+            input_img = self.render_image(shapes=input_adv)
+
+            mean, std = self.framework_params["mean"], self.framework_params["std"]
+            normalize = transforms.Normalize(mean, std)
+            input_img = normalize(input_img[0])
+            input_img = input_img.unsqueeze(0)
+            output = model(input_img)
+
+            # distance to the original input data
+            if input_orig is None:
+                dist = l2_dist(input_adv, input_var, keepdim=False)
+            else:
+                dist = l2_dist(input_adv, input_orig, keepdim=False)
+
+            loss = _loss(output, target_var, dist, scale_const_var)
+            optimizer.zero_grad()
+            loss.backward(retain_graph=True)
+            self.translation.grad = self.translation.grad * 0
+            self.euler_angles.grad = self.euler_angles.grad * 0
+            optimizer.step()
+
+            loss_np = loss.data.item()
+            dist_np = dist.data.cpu().numpy()
+            output_np = output.data.cpu().numpy()
+            input_adv_np = input_img.data.cpu().numpy()  # back to BHWC for numpy consumption
+            return loss_np, dist_np, output_np, input_adv_np
+
+        for step in range(max_steps):
+            # perform the attack
+            loss, dist, output, adv_img = _optimize(
+                optimizer,
+                self.framework,
+                input_var,
+                modifier_var,
+                target_var,
+                scale_const_var,
+                input_orig)
+
+            print(output, loss, dist)
+
+            if np.argmax(output).item() != label and step != 0:
+                print("misclassification at step ", step)
+                self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(step) + ".png")
+                return
+
+            #if step % 250 == 0:
+            #    img = self.render_image(out_dir=out_dir, filename=filename + "_iter_" + str(step) + ".png")
+
+
 
 
 #######################
