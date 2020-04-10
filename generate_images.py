@@ -69,7 +69,7 @@ for hashcode in hashcodes:
                                          vertex_epsilon=5.0, pose_epsilon=0.5, vertex_lr=0.01, pose_lr=0.25,
                                          vertex_attack=vertex_attack, pose_attack=pose_attack)
             elif attack_type == "CW":
-                pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=500, vertex_lr=0.01, pose_lr=0.25,
+                pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_lr=0.01, pose_lr=0.25,
                                          vertex_attack=vertex_attack, pose_attack=pose_attack, target=target)
 
             total_errors += (pred.item() != label)

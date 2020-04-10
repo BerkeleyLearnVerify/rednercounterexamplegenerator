@@ -84,19 +84,21 @@ class SemanticPerturbations:
         self.input_adv_list = []
         self.input_orig_list = []
         self.targeted = False
-        self.clamp_fn = ""
+        self.clamp_fn = "tanh"
+
+        self.attack_type = attack_type
 
         if attack_type == "CW":
             for _, mesh in mesh_list:
                 vertices.append(mesh.vertices)
-                modifier = torch.randn(mesh.vertices.size(), requires_grad=True, device=pyredner.get_device())
+                modifier = torch.zeros(mesh.vertices.size(), requires_grad=True, device=pyredner.get_device())
                 self.modifiers.append(modifier)
                 if self.clamp_fn == "tanh":
-                    mesh.vertices = tanh_rescale(torch_arctanh(mesh.vertices) + modifier * 0.01)
                     self.input_orig_list.append(tanh_rescale(torch_arctanh(mesh.vertices)))
+                    mesh.vertices = tanh_rescale(torch_arctanh(mesh.vertices) + modifier)
                 else:
-                    mesh.vertices = mesh.vertices + modifier * 0.01
                     self.input_orig_list.append(mesh.vertices)
+                    mesh.vertices = mesh.vertices + modifier
 
                 self.input_adv_list.append(mesh.vertices)
                 mesh.vertices.retain_grad()
@@ -113,9 +115,6 @@ class SemanticPerturbations:
             material_id_map[key] = count
             count += 1
             self.materials.append(value)
-
-        import ipdb;
-        ipdb.set_trace()
 
         self.shapes = []
         self.cw_shapes = []
@@ -136,6 +135,7 @@ class SemanticPerturbations:
 
         self.angle_input_adv_list = []
         self.angle_input_orig_list = []
+        self.pose = pose
         if attack_type == "CW":
             self.euler_angles_modifier = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
             if self.clamp_fn == "tanh":
@@ -242,14 +242,22 @@ class SemanticPerturbations:
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
         vertices = []
-        import ipdb; ipdb.set_trace()
-        for shape in self.shapes:
-            shape_v = shape.vertices.clone().detach()
-            shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
-            shape.vertices.retain_grad()
-            shape.vertices.register_hook(set_grad(shape.vertices))
-            shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
-            vertices.append(shape.vertices.clone().detach())
+        if self.attack_type == "CW":
+            for m, shape in zip(self.modifiers, self.shapes):
+                shape_v = shape.vertices.clone().detach() - m.clone().detach() + m
+                shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
+                shape.vertices.retain_grad()
+                shape.vertices.register_hook(set_grad(shape.vertices))
+                shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
+                vertices.append(shape.vertices.clone().detach())
+        else:
+            for shape in self.shapes:
+                shape_v = shape.vertices.clone().detach()
+                shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
+                shape.vertices.retain_grad()
+                shape.vertices.register_hook(set_grad(shape.vertices))
+                shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
+                vertices.append(shape.vertices.clone().detach())
         self.center = torch.mean(torch.cat(vertices), 0)
         # Assemble the 3D scene.
         scene = pyredner.Scene(camera=self.camera, shapes=self.shapes, materials=self.materials)
@@ -265,7 +273,13 @@ class SemanticPerturbations:
         dummy_img = self._model()
 
         # honestly dont know if this makes a difference, but...
-        self.euler_angles.data = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
+        if self.attack_type == "CW":
+            self.euler_angles_modifier.data = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
+            self.euler_angles = tanh_rescale(torch_arctanh(
+                        torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+        else:
+            self.euler_angles.data = torch.tensor([0., 0., 0.], device=pyredner.get_device(),
+                                                           requires_grad=True)
         img = self._model()
         # just meant to prevent rotations from being stacked onto one another with the above line
 
@@ -487,26 +501,89 @@ class SemanticPerturbations:
             inf_count = 0
             nan_count = 0
 
-            import ipdb;
-            ipdb.set_trace()
             if vertex_attack:
                 # attack each shape's vertices
-                for shape in self.modifiers:
-                    if not torch.isfinite(shape.grad).all():
+                self.input_orig_list = []
+                self.input_adv_list = []
+
+                for shape, m in zip(self.shapes, self.modifiers):
+                    shape.vertices = shape.vertices.clone().detach() - m.clone().detach()
+                    if not torch.isfinite(m.grad).all():
                         inf_count += 1
-                    elif torch.isnan(shape.grad).any():
+                    elif torch.isnan(m.grad).any():
                         nan_count += 1
                     else:
                         # subtract because we are trying to decrease the classification score of the label
-                        shape.data -= shape.grad / (torch.norm(shape.grad) + delta) * vertex_lr
+                        m.data -= m.grad / (
+                            torch.norm(m.grad) + delta) * vertex_lr
+
+
+                for shape, m in zip(self.shapes, self.modifiers):
+                    if self.clamp_fn == "tanh":
+                        self.input_orig_list.append(tanh_rescale(torch_arctanh(shape.vertices)))
+                        shape.vertices = tanh_rescale(torch_arctanh(shape.vertices) + m)
+                    else:
+                        self.input_orig_list.append(shape.vertices)
+                        shape.vertices = shape.vertices + m
+
+                    self.input_adv_list.append(shape.vertices)
+
 
             # self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             # self.translation.retain_grad()
             # print(self.euler_angles)
 
             if pose_attack:
+                self.angle_input_adv_list = []
+                self.angle_input_orig_list = []
+
+                self.euler_angles = self.euler_angles.clone().detach() - self.euler_angles_modifier.clone().detach()
                 self.euler_angles_modifier.data -= self.euler_angles_modifier.grad / (
                             torch.norm(self.euler_angles_modifier.grad) + delta) * pose_lr
+
+                if self.clamp_fn == "tanh":
+                    if self.pose == 'forward':
+                        self.euler_angles = tanh_rescale(torch_arctanh(
+                            torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                        self.angle_input_orig_list.append(
+                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+                    elif self.pose == 'top':
+                        self.euler_angles = tanh_rescale(torch_arctanh(
+                            torch.tensor([0.35, 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                        self.angle_input_orig_list.append(
+                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+                    elif self.pose == 'left':
+                        self.euler_angles = tanh_rescale(torch_arctanh(
+                            torch.tensor([0., 0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                        self.angle_input_orig_list.append(
+                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+                    elif self.pose == 'right':
+                        self.euler_angles = tanh_rescale(torch_arctanh(
+                            torch.tensor([0., -0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                        self.angle_input_orig_list.append(
+                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+                else:
+                    if self.pose == 'forward':
+                        self.euler_angles = torch.tensor([0., 0., 0.],
+                                                         device=pyredner.get_device()) + self.euler_angles_modifier
+                        self.angle_input_orig_list.append(torch.tensor([0., 0., 0.], device=pyredner.get_device()))
+                    elif self.pose == 'top':
+                        self.euler_angles = torch.tensor([0.35, 0., 0.],
+                                                         device=pyredner.get_device()) + self.euler_angles_modifier
+                        self.angle_input_orig_list.append(torch.tensor([0.35, 0., 0.], device=pyredner.get_device()))
+                    elif self.pose == 'left':
+                        self.euler_angles = torch.tensor([0., 0.50, 0.],
+                                                         device=pyredner.get_device()) + self.euler_angles_modifier
+                        self.angle_input_orig_list.append(torch.tensor([0., 0.50, 0.], device=pyredner.get_device()))
+                    elif self.pose == 'right':
+                        self.euler_angles = torch.tensor([0., -0.50, 0.],
+                                                         device=pyredner.get_device()) + self.euler_angles_modifier
+                        self.angle_input_orig_list.append(torch.tensor([0., -0.50, 0.], device=pyredner.get_device()))
+
+                self.angle_input_adv_list.append(self.euler_angles)
+
+
+
 
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
             # print("rotation grad: ", self.euler_angles.grad)
