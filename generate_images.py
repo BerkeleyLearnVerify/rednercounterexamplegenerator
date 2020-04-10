@@ -30,18 +30,27 @@ if pose == 'all':
 else:
     poses = [pose]
 
-background = "/work/yan.andy4/rednercounterexamplegenerator/lighting/blue_white.png"
-imagenet_filename = "/work/yan.andy4/rednercounterexamplegenerator/class_labels.json"
 vertex_attack = args.params == "vertex" or args.params == "all"
 pose_attack = args.params == "pose" or args.params == "all"
 
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
 
+background = "/work/yan.andy4/rednercounterexamplegenerator/lighting/blue_white.png"
+imagenet_filename = "/work/yan.andy4/rednercounterexamplegenerator/class_labels.json"
+
 if attack_type is None:
     out_dir = "/work/yan.andy4/rednercounterexamplegenerator/out/benign/" + obj_id
 else:
-    out_dir = "/work/yan.andy4/rednercounterexamplegenerator/out/" + attack_type + "/" + obj_id
+    out_dir = "/work/yan.andy4/rednercounterexamplegenerator/out/" + attack_type + "/" + args.params + "/" + obj_id
+
+#background = "/home/lakshya/rednercounterexamplegenerator/lighting/blue_white.png"
+#imagenet_filename = "/home/lakshya/rednercounterexamplegenerator/class_labels.json"
+
+#if attack_type is None:
+#    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/benign/" + obj_id
+#else:
+#    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/" + attack_type + "/" + args.params + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 #changed!

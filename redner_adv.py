@@ -463,7 +463,7 @@ class SemanticPerturbations:
             filename = save_title
 
         # classify
-        img = self.render_image(out_dir=out_dir, filename=filename)
+        img = self.render_image()
 
         if target is not None:
             target = torch.tensor([target]).cuda()
@@ -482,6 +482,7 @@ class SemanticPerturbations:
             pred, net_out = self.classify(img)
             if pred.item() != label and i != 0:
                 print("misclassification at step ", i)
+                plt.imsave(out_dir + "/" + filename, np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
                 return pred, img
             # get gradients
             # self._get_gradients(img.cpu(), net_out, label)
@@ -593,7 +594,7 @@ class SemanticPerturbations:
             else:
                 filename = save_title
 
-            img = self.render_image(out_dir=out_dir, filename=filename)
+            img = self.render_image()
 
         final_pred, net_out = self.classify(img)
         return final_pred, img
