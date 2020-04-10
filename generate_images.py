@@ -34,13 +34,13 @@ pose_attack = args.params == "pose" or args.params == "all"
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
 
-background = "/home/lakshya/redner_adv_experiments/lighting/blue_white.png"
-imagenet_filename = "/home/lakshya/redner_adv_experiments/class_labels.json"
+background = "/home/lakshya/rednercounterexamplegenerator/lighting/blue_white.png"
+imagenet_filename = "/home/lakshya/rednercounterexamplegenerator/class_labels.json"
 
 if attack_type is None:
-    out_dir = "/home/lakshya/redner_adv_experiments/out/benign/" + obj_id 
+    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/benign/" + obj_id 
 else:
-    out_dir = "/home/lakshya/redner_adv_experiments/out/" + attack_type + "/" + obj_id
+    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/" + attack_type + "/" + args.params + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 #changed!
