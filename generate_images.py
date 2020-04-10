@@ -70,16 +70,19 @@ for hashcode in hashcodes:
                 print("\n\n\n")
                 continue
             elif attack_type == "FGSM":
-                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5,
-                                          vertex_eps=0.002, pose_eps=0.15, vertex_attack=vertex_attack,
-                                          pose_attack=pose_attack)
+                pred, img = v.attack_FGSM(label, out_dir=None, save_title=None, steps=5, vertex_eps=0.002, pose_eps=0.15,
+                                          vertex_attack=vertex_attack, pose_attack=pose_attack)
+                plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "PGD":
-                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5,
-                                         vertex_epsilon=5.0, pose_epsilon=0.5, vertex_lr=0.01, pose_lr=0.25,
-                                         vertex_attack=vertex_attack, pose_attack=pose_attack)
+                pred, img = v.attack_PGD(label, out_dir=None, save_title=None, steps=5, vertex_epsilon=5.0,
+                                         pose_epsilon=0.5, vertex_lr=0.01, pose_lr=0.25, vertex_attack=vertex_attack,
+                                         pose_attack=pose_attack)
+                plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png",
+                           np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "CW":
                 pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_lr=0.01, pose_lr=0.25,
                                          vertex_attack=vertex_attack, pose_attack=pose_attack, target=target)
+                plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
 
             total_errors += (pred.item() != label)
             sample_size += 1
