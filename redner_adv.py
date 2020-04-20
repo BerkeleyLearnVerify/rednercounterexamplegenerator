@@ -17,7 +17,7 @@ NUM_CLASSES = 12
 vgg16 = vgg.vgg16(pretrained=True)
 num_ftrs = vgg16.classifier[6].in_features
 vgg16.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
-vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
+vgg16.load_state_dict(torch.load('torch_models/model_ft.pt', map_location=lambda storage, location: storage))
 
 
 def set_grad(var):
@@ -68,7 +68,7 @@ def tanh_rescale(x, x_min=-1., x_max=1.):
 class SemanticPerturbations:
     def __init__(self, framework, filename, dims, label_names, normalize_params, background, pose,
                  attack_type="benign"):
-        self.framework = framework.cuda()
+        self.framework = framework.to(pyredner.get_device())
         self.image_dims = dims
         self.label_names = label_names
         self.framework_params = normalize_params
@@ -352,11 +352,6 @@ class SemanticPerturbations:
             # print("rotation grad: ", self.euler_angles.grad)
             # optimizer.step()
 
-            if save_title is not None:
-                filename = save_title + "_iter_" + str(i) + ".png"
-            else:
-                filename = save_title
-
             img = self.render_image(out_dir=out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
@@ -421,10 +416,6 @@ class SemanticPerturbations:
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
             # print("rotation grad: ", self.euler_angles.grad)
             # optimizer.step()
-            if save_title is not None:
-                filename = save_title + "_iter_" + str(i) + ".png"
-            else:
-                filename = save_title
 
             img = self.render_image(out_dir=out_dir, filename=filename)
 
@@ -444,7 +435,7 @@ class SemanticPerturbations:
         loss1 = torch.sum(scale_const * loss1)
 
         loss2 = dist.sum()
-        print(loss1, loss2)
+        # print(loss1, loss2)
         loss = loss1 + loss2
         return loss
 
@@ -463,15 +454,15 @@ class SemanticPerturbations:
             filename = save_title
 
         # classify
-        img = self.render_image()
+        img = self.render_image(out_dir=out_dir, filename=filename)
 
         if target is not None:
-            target = torch.tensor([target]).cuda()
+            target = torch.tensor([target]).to(pyredner.get_device())
             self.targeted = True
         else:
-            target = torch.tensor([label]).cuda()
+            target = torch.tensor([label]).to(pyredner.get_device())
 
-        target_onehot = torch.zeros(target.size() + (NUM_CLASSES,)).cuda()
+        target_onehot = torch.zeros(target.size() + (NUM_CLASSES,)).to(pyredner.get_device())
         target_onehot.scatter_(1, target.unsqueeze(1), 1.)
 
         # only there to zero out gradients.
@@ -589,12 +580,8 @@ class SemanticPerturbations:
             # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
             # print("rotation grad: ", self.euler_angles.grad)
             # optimizer.step()
-            if save_title is not None:
-                filename = save_title + "_iter_" + str(i) + ".png"
-            else:
-                filename = save_title
 
-            img = self.render_image()
+            img = self.render_image(out_dir = out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
         return final_pred, img

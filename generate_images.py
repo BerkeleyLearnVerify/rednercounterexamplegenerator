@@ -36,13 +36,13 @@ pose_attack = args.params == "pose" or args.params == "all"
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
 
-background = "/work/yan.andy4/rednercounterexamplegenerator/lighting/blue_white.png"
-imagenet_filename = "/work/yan.andy4/rednercounterexamplegenerator/class_labels.json"
+background = "lighting/blue_white.png"
+imagenet_filename = "class_labels.json"
 
 if attack_type is None:
-    out_dir = "/work/yan.andy4/rednercounterexamplegenerator/out/benign/" + obj_id
+    out_dir = "out/benign/" + obj_id
 else:
-    out_dir = "/work/yan.andy4/rednercounterexamplegenerator/out/" + attack_type + "/" + args.params + "/" + obj_id
+    out_dir = "out/" + attack_type + "/" + args.params + "/" + obj_id
 
 #background = "/home/lakshya/rednercounterexamplegenerator/lighting/blue_white.png"
 #imagenet_filename = "/home/lakshya/rednercounterexamplegenerator/class_labels.json"
@@ -61,7 +61,7 @@ sample_size = 0
 for hashcode in hashcodes:
     print(hashcode)
     for pose in poses:
-        obj_filename = "/work/yan.andy4/rednercounterexamplegenerator/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
+        obj_filename = "../../ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
         try:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose, attack_type=attack_type)
@@ -70,16 +70,16 @@ for hashcode in hashcodes:
                 print("\n\n\n")
                 continue
             elif attack_type == "FGSM":
-                pred, img = v.attack_FGSM(label, out_dir=None, save_title=None, steps=5, vertex_eps=0.002, pose_eps=0.15,
+                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_eps=0.002, pose_eps=0.15,
                                           vertex_attack=vertex_attack, pose_attack=pose_attack)
-                plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
+                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "PGD":
-                pred, img = v.attack_PGD(label, out_dir=None, save_title=None, steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, vertex_lr=0.01, pose_lr=0.20, vertex_attack=vertex_attack, pose_attack=pose_attack)
-                plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
+                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, vertex_lr=0.01, pose_lr=0.20, vertex_attack=vertex_attack, pose_attack=pose_attack)
+                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "CW":
                 pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_lr=0.01, pose_lr=0.20,
                                          vertex_attack=vertex_attack, pose_attack=pose_attack, target=target)
-                plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
+                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
 
             total_errors += (pred.item() != label)
             sample_size += 1
