@@ -36,21 +36,13 @@ pose_attack = args.params == "pose" or args.params == "all"
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
 
-background = "lighting/blue_white.png"
-imagenet_filename = "class_labels.json"
+background = "/home/andrew_lee/rednercounterexamplegenerator/lighting/blue_white.png"
+imagenet_filename = "/home/andrew_lee/rednercounterexamplegenerator/class_labels.json"
 
 if attack_type is None:
-    out_dir = "out/benign/" + obj_id
+    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/benign/" + obj_id
 else:
-    out_dir = "out/" + attack_type + "/" + args.params + "/" + obj_id
-
-#background = "/home/lakshya/rednercounterexamplegenerator/lighting/blue_white.png"
-#imagenet_filename = "/home/lakshya/rednercounterexamplegenerator/class_labels.json"
-
-#if attack_type is None:
-#    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/benign/" + obj_id
-#else:
-#    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/" + attack_type + "/" + args.params + "/" + obj_id
+    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/" + attack_type + "/" + args.params + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 #changed!
@@ -61,7 +53,7 @@ sample_size = 0
 for hashcode in hashcodes:
     print(hashcode)
     for pose in poses:
-        obj_filename = "../../ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
+        obj_filename = "/nfs/diskstation/andrew_lee/cs294/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         #out_dir += "/" + hashcode
         try:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose, attack_type=attack_type)

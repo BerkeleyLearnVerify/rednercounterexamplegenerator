@@ -134,73 +134,84 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
     return model, val_acc_history
 
 
+if __name__ == '__main__':
 
-NUM_CLASSES = 12
-feature_extract = False
+    NUM_CLASSES = 12
+    feature_extract = False
 
-model_ft = models.vgg16(pretrained=True)
-set_parameter_requires_grad(model_ft, feature_extract)
-num_ftrs = model_ft.classifier[6].in_features
-model_ft.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
-input_size = 224
+    model_ft = models.vgg16(pretrained=True)
+    set_parameter_requires_grad(model_ft, feature_extract)
+    num_ftrs = model_ft.classifier[6].in_features
+    model_ft.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
+    input_size = 224
 
-print(model_ft)
+    print(model_ft)
 
-shape_dataset = ShapeNetRednerDataset('/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/benign',
-                        transforms.Compose([
-                            transforms.ToTensor(),
-                            transforms.Normalize([0.6109, 0.7387, 0.7765],
-                                                 [0.2715, 0.3066, 0.3395]),
-                        ]))
+    shape_dataset = ShapeNetRednerDataset('/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/benign',
+                            transforms.Compose([
+                                transforms.ToTensor(),
+                                transforms.Normalize([0.6109, 0.7387, 0.7765],
+                                                     [0.2715, 0.3066, 0.3395]),
+                            ]))
 
-# Stratified train-val split
-dataset_labels = shape_dataset.labels
+    # Stratified train-val split
+    dataset_labels = shape_dataset.labels
 
-train_idx, val_idx = train_test_split(np.arange(len(dataset_labels)),
-                                      test_size=0.2,
-                                      shuffle=True,
-                                      stratify=dataset_labels,
-                                      random_state=100) # DO NOT CHANGE
+    train_idx, test_idx = train_test_split(np.arange(len(dataset_labels)),
+                                          test_size=0.3,
+                                          shuffle=True,
+                                          stratify=dataset_labels,
+                                          random_state=100) # DO NOT CHANGE
 
-train_sampler = torch.utils.data.SubsetRandomSampler(train_idx)
-val_sampler = torch.utils.data.SubsetRandomSampler(val_idx)
+    val_idx, test_idx = train_test_split(test_idx,
+                                         test_size=2/3,
+                                         shuffle=True,
+                                         stratify=[dataset_labels[i] for i in test_idx],
+                                         random_state=100) # DO NOT CHANGE
 
-shape_train_dataloader = torch.utils.data.DataLoader(shape_dataset, batch_size=4,
-                                                     num_workers=4,
-                                                     sampler=train_sampler)
-shape_val_dataloader = torch.utils.data.DataLoader(shape_dataset, batch_size=4,
-                                                   num_workers=4,
-                                                   sampler=val_sampler)
+    print(train_idx)
+    print(val_idx)
+    print(test_idx)
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print('device:', device)
-# Send the model to GPU
-model_ft = model_ft.to(device)
+    train_sampler = torch.utils.data.SubsetRandomSampler(train_idx)
+    val_sampler = torch.utils.data.SubsetRandomSampler(val_idx)
 
-# Gather the parameters to be optimized/updated in this run. If we are
-#  finetuning we will be updating all parameters. However, if we are
-#  doing feature extract method, we will only update the parameters
-#  that we have just initialized, i.e. the parameters with requires_grad
-#  is True.
-params_to_update = model_ft.parameters()
-print("Params to learn:")
-if feature_extract:
-    params_to_update = []
-    for name,param in model_ft.named_parameters():
-        if param.requires_grad == True:
-            params_to_update.append(param)
-            print("\t",name)
-else:
-    for name,param in model_ft.named_parameters():
-        if param.requires_grad == True:
-            print("\t",name)
+    shape_train_dataloader = torch.utils.data.DataLoader(shape_dataset, batch_size=4,
+                                                         num_workers=4,
+                                                         sampler=train_sampler)
+    shape_val_dataloader = torch.utils.data.DataLoader(shape_dataset, batch_size=4,
+                                                       num_workers=4,
+                                                       sampler=val_sampler)
 
-# Observe that all parameters are being optimized
-optimizer_ft = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
-criterion = nn.CrossEntropyLoss()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print('device:', device)
+    # Send the model to GPU
+    model_ft = model_ft.to(device)
 
-model_ft, hist = train_model(model_ft, {'train': shape_train_dataloader,
-                                        'val': shape_val_dataloader },
-                             criterion, optimizer_ft, num_epochs=20)
+    # Gather the parameters to be optimized/updated in this run. If we are
+    #  finetuning we will be updating all parameters. However, if we are
+    #  doing feature extract method, we will only update the parameters
+    #  that we have just initialized, i.e. the parameters with requires_grad
+    #  is True.
+    params_to_update = model_ft.parameters()
+    print("Params to learn:")
+    if feature_extract:
+        params_to_update = []
+        for name,param in model_ft.named_parameters():
+            if param.requires_grad == True:
+                params_to_update.append(param)
+                print("\t",name)
+    else:
+        for name,param in model_ft.named_parameters():
+            if param.requires_grad == True:
+                print("\t",name)
 
-torch.save(model_ft.state_dict(), 'model_ft.pt')
+    # Observe that all parameters are being optimized
+    optimizer_ft = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
+    criterion = nn.CrossEntropyLoss()
+
+    model_ft, hist = train_model(model_ft, {'train': shape_train_dataloader,
+                                            'val': shape_val_dataloader },
+                                 criterion, optimizer_ft, num_epochs=20)
+
+    torch.save(model_ft.state_dict(), 'model_ft.pt')

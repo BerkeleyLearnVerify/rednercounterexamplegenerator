@@ -13,7 +13,7 @@ class ShapeNetRednerDataset(Dataset):
                '03513137', '03710193', '03790512', '04225987', '04460130',
                '04468005', '04530566',)
         self.classes = ('airplane', 'bench', 'trashcan', 'bus', 'car', 'helmet',
-                   'mailbox', 'motorcycle', 'skateboard', 'tower', 'train',
+                   'mailbox', 'motorcycle', 'skatboard', 'tower', 'train',
                    'boat',)
         self.transform = transform
 
@@ -40,6 +40,7 @@ class ShapeNetRednerDataset(Dataset):
             idx = idx.tolist()
 
         data = self.data[idx]
+        print(data['path'])
         im = skio.imread(data['path'])
         if im.shape[-1] == 4:
             im = im[:,:,:3] # strip alpha channel
