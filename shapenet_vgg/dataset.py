@@ -40,7 +40,6 @@ class ShapeNetRednerDataset(Dataset):
             idx = idx.tolist()
 
         data = self.data[idx]
-        print(data['path'])
         im = skio.imread(data['path'])
         if im.shape[-1] == 4:
             im = im[:,:,:3] # strip alpha channel

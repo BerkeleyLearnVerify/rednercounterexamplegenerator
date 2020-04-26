@@ -24,16 +24,24 @@ class AccuracyTracker(object):
             class_labels = [i for i in range(num_classes)]
         assert num_classes == len(class_labels)
         self.class_labels = list(class_labels)
+        self.predictions = []
 
-    def update(self, labels, topkpreds):
+    def update(self, labels, topkpreds, example_paths=None):
         """labels is a length `batch_size` vector of labels (indices).
         topkpreds is a size (`batch_size`, `k`) matrix of top-k predictions.
+        example_paths is a length k list of paths
         """
         np.add.at(self.totals, labels, 1) # increment label counts
         matches = np.equal(topkpreds, labels[:,np.newaxis])
         for i, l in enumerate(labels):
             # top-1 match counts for top-2 and top-3
             self.counts[l,:] += np.cumsum(matches[i,:])
+
+            self.predictions.append({
+                'path': example_paths[i] if example_paths else '',
+                'label': int(l),
+                'preds': [int(p) for p in topkpreds[i,:]]
+            })
 
     def show(self):
         row_format = "{:>12} " * (len(self.class_labels) + 2) # total column

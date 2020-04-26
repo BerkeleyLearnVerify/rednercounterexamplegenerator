@@ -8,6 +8,8 @@ from torchvision import models, transforms
 import matplotlib.pyplot as plt
 import time
 import os
+import json
+import sys
 import copy
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
@@ -26,7 +28,7 @@ input_size = 224
 
 print(model_ft)
 
-path = '/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/FGSM/vertex'
+path = sys.argv[1]
 
 shape_dataset = ShapeNetRednerDataset(path,
                         transforms.Compose([
@@ -48,7 +50,7 @@ shape_dataloader = torch.utils.data.DataLoader(shape_dataset, batch_size=1,
                                                num_workers=1)
 acc_tracker = AccuracyTracker(12, 3, shape_dataset.classes)
 
-for inputs, labels in tqdm(shape_dataloader):
+for i, (inputs, labels) in enumerate(tqdm(shape_dataloader)):
     inputs = inputs.to(device)
     labels = labels.to(device)
 
@@ -57,19 +59,10 @@ for inputs, labels in tqdm(shape_dataloader):
     _, preds = torch.max(outputs, 1)
     _, topkpreds = torch.topk(outputs, 3, 1, True, True)
     acc_tracker.update(labels.data.cpu().numpy(),
-                       topkpreds.data.cpu().numpy())
+                       topkpreds.data.cpu().numpy(),
+                       [shape_dataset.data[i]['path']])
 
 acc_tracker.show()
-# for i in val_idx:
-#     print(shape_dataset.data[i])
-#     inputs, labels = shape_dataset[i]
-#     inputs = inputs.unsqueeze(0)
-#     inputs = inputs.to(device)
-#     with torch.set_grad_enabled(False):
-#         outputs = model_ft(inputs)
-#         print(outputs)
-
-#     im = np.transpose(np.squeeze(inputs.cpu().numpy()), (1, 2, 0))
-
-#     plt.imshow(im)
-#     plt.show()
+json.dump(acc_tracker.predictions,
+          open(os.path.join(path, 'predictions.json'), 'w'),
+          indent=0)
