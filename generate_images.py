@@ -40,9 +40,9 @@ background = "/home/andrew_lee/rednercounterexamplegenerator/lighting/blue_white
 imagenet_filename = "/home/andrew_lee/rednercounterexamplegenerator/class_labels.json"
 
 if attack_type is None:
-    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/benign/" + obj_id
+    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_augmented/out/benign/" + obj_id
 else:
-    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/" + attack_type + "/" + args.params + "/" + obj_id
+    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_augmented/out/" + attack_type + "/" + args.params + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 #changed!
