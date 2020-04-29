@@ -354,7 +354,7 @@ class SemanticPerturbations:
                     self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta)) * pose_eps
 
             if lighting_attack:
-                light_sub = torch.sign(self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta)) * light_eps
+                light_sub = torch.sign(self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta)) * lighting_eps
                 light_sub = torch.min(self.light.intensity.data, light_sub)
                 self.light.intensity.data -= light_sub
 
