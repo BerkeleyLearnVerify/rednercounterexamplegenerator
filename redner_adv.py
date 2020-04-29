@@ -194,7 +194,7 @@ class SemanticPerturbations:
 
         self.light = pyredner.PointLight(
             position=(self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
-            intensity=torch.tensor((20000.0, 30000.0, 20000.0), device=pyredner.get_device()))
+            intensity=Variable(torch.tensor((20000.0, 30000.0, 20000.0), device=pyredner.get_device()), requires_grad=True))
 
         background = pyredner.imread(background)
         self.background = background.to(pyredner.get_device())
@@ -304,8 +304,8 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_FGSM(self, label, out_dir=None, save_title=None, steps=5, vertex_eps=0.001, pose_eps=0.05,
-                    vertex_attack=True, pose_attack=True):
+    def attack_FGSM(self, label, out_dir=None, save_title=None, steps=5, vertex_eps=0.001, pose_eps=0.05, lighting_eps=4000,
+                    vertex_attack=True, pose_attack=True, lighting_attack=False):
         if out_dir is not None and save_title is None:
             raise Exception("Must provide image title if out dir is provided")
         elif save_title is not None and out_dir is None:
@@ -353,6 +353,11 @@ class SemanticPerturbations:
                 self.euler_angles.data -= torch.sign(
                     self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta)) * pose_eps
 
+            if lighting_attack:
+                light_sub = torch.sign(self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta)) * light_eps
+                light_sub = torch.min(self.light.intensity.data, light_sub)
+                self.light.intensity.data -= light_sub
+
             # print("rotation grad: ", self.euler_angles.grad)
             # optimizer.step()
 
@@ -363,9 +368,9 @@ class SemanticPerturbations:
 
     # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
     # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
-    def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0,
-                   vertex_lr=0.001, pose_lr=0.05,
-                   vertex_attack=True, pose_attack=True):
+    def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
+                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0,
+                   vertex_attack=True, pose_attack=True, lighting_attack=False):
 
         if out_dir is not None and save_title is None:
             raise Exception("Must provide image title if out dir is provided")
@@ -411,6 +416,12 @@ class SemanticPerturbations:
             # self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             # self.translation.retain_grad()
             # print(self.euler_angles)
+            if lighting_attack:
+                light_sub = torch.clamp(
+                    self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr, -lighting_epsilon,
+                    lighting_epsilon)
+                light_sub = torch.min(self.light.intensity.data, light_sub)
+                self.light.intensity.data -= light_sub
 
             if pose_attack:
                 self.euler_angles.data -= torch.clamp(
