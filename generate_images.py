@@ -9,7 +9,7 @@ parser.add_argument('--label', type=int)
 parser.add_argument('--target', type=int)
 parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right', 'all'], default='all')
 parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD', 'CW'])
-parser.add_argument('--params', type=str, choices=["vertex", "pose", "all"], default="all")
+parser.add_argument('--params', type=str, choices=["vertex", "pose", "lighting", "all"], default="all")
 #for vgg16, shape is (224,224)
 
 args = parser.parse_args()
@@ -30,8 +30,10 @@ if pose == 'all':
 else:
     poses = [pose]
 
+#all really means vertex + pose -- geometric attributes. FIX THE NAMING @LAKSHYA
 vertex_attack = args.params == "vertex" or args.params == "all"
 pose_attack = args.params == "pose" or args.params == "all"
+lighting_attack = args.params == "lighting"
 
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
@@ -70,17 +72,19 @@ for hashcode in hashcodes:
                 print("\n\n\n")
                 continue
             elif attack_type == "FGSM":
-                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_eps=0.002, pose_eps=0.15,
-                                          vertex_attack=vertex_attack, pose_attack=pose_attack)
+                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_eps=0.002, pose_eps=0.15, lighting_eps=4000,
+                                          vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "PGD":
-                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, vertex_lr=0.01, pose_lr=0.20, vertex_attack=vertex_attack, pose_attack=pose_attack)
+                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, lighting_epsilon=8000, 
+                                         vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000, vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "CW":
                 pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_lr=0.01, pose_lr=0.20,
                                          vertex_attack=vertex_attack, pose_attack=pose_attack, target=target)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
-
+            print(pred.item())
+            print(label)
             total_errors += (pred.item() != label)
             sample_size += 1
             print("Total Errors: ", total_errors)
