@@ -64,7 +64,6 @@ for hashcode in hashcodes:
     print(hashcode)
     for pose in poses:
         obj_filename = "../../ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
-        #out_dir += "/" + hashcode
         try:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose, attack_type=attack_type)
             if attack_type is None:
@@ -80,8 +79,8 @@ for hashcode in hashcodes:
                                          vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000, vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "CW":
-                pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_lr=0.01, pose_lr=0.20,
-                                         vertex_attack=vertex_attack, pose_attack=pose_attack, target=target)
+                pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000,
+                                         vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack, target=target)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             print(pred.item())
             print(label)

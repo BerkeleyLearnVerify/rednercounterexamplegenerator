@@ -192,9 +192,26 @@ class SemanticPerturbations:
             elif pose == 'right':
                 self.euler_angles = torch.tensor([0., -0.50, 0.], device=pyredner.get_device(), requires_grad=True)
 
-        self.light = pyredner.PointLight(
-            position=(self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
-            intensity=Variable(torch.tensor((20000.0, 30000.0, 20000.0), device=pyredner.get_device()), requires_grad=True))
+        if attack_type == "CW":
+            self.light_input_orig_list = []
+            self.light_input_adv_list = []
+            self.light_modifier = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
+            self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0])
+            if self.clamp_fn == "tanh":
+                self.light_intensity = torch.norm(self.light_init_vals) * tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals))) + self.light_modifier
+                self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
+            else:
+                self.light_intensity = torch.tensor(self.light_init_vals/torch.norm(self.light_init_vals),
+                    device=pyredner.get_device()) * torch.norm(self.light_init_vals) + self.light_modifier
+                self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
+            self.light_input_adv_list.append(self.light_intensity)
+            self.light = pyredner.PointLight(
+                position=(self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
+                intensity=self.light_intensity)
+        else:
+            self.light = pyredner.PointLight(
+                position=(self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
+                intensity=Variable(torch.tensor((20000.0, 30000.0, 20000.0), device=pyredner.get_device()), requires_grad=True))
 
         background = pyredner.imread(background)
         self.background = background.to(pyredner.get_device())
@@ -455,8 +472,8 @@ class SemanticPerturbations:
         return loss
 
     def attack_cw(self, label, out_dir=None, save_title=None, steps=5,
-                  vertex_lr=0.001, pose_lr=0.05,
-                  vertex_attack=True, pose_attack=True, target=None):
+                  vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
+                  vertex_attack=True, pose_attack=True, lighting_attack=False, target=None):
 
         if out_dir is not None and save_title is None:
             raise Exception("Must provide image title if out dir is provided")
@@ -481,7 +498,7 @@ class SemanticPerturbations:
         target_onehot.scatter_(1, target.unsqueeze(1), 1.)
 
         # only there to zero out gradients.
-        optimizer = torch.optim.Adam([self.translation, self.euler_angles_modifier], lr=0)
+        optimizer = torch.optim.Adam([self.translation, self.euler_angles_modifier, self.light_modifier] + [m for m in self.modifiers], lr=0)
 
         for i in range(steps):
             optimizer.zero_grad()
@@ -502,8 +519,10 @@ class SemanticPerturbations:
                 dist = l2_dist(self.angle_input_adv_list, self.angle_input_orig_list, False)
                 loss += self.cw_loss(net_out, target_onehot, dist, 0.1)
 
+            if lighting_attack:
+                dist = l2_dist(self.light_input_adv_list, self.light_input_orig_list, False)
+                loss += self.cw_loss(net_out, target_onehot, dist, 0.1)
             loss.backward(retain_graph=True)
-
             delta = 1e-6
             inf_count = 0
             nan_count = 0
@@ -539,6 +558,24 @@ class SemanticPerturbations:
             # self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
             # self.translation.retain_grad()
             # print(self.euler_angles)
+            if lighting_attack:
+                self.light_input_orig_list = []
+                self.light_input_adv_list = []
+                self.light_intensity = self.light_intensity.clone().detach() - self.light_modifier.clone().detach()
+                self.light_modifier.data -= self.light_modifier.grad / (torch.norm(self.light_modifier.grad) + delta) * lighting_lr
+                if self.clamp_fn == "tanh":
+                    self.light_init_vals = self.light_intensity.clone().detach()
+                    self.light_intensity = torch.norm(self.light_init_vals) * tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals))) + self.light_modifier
+                    self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
+                else:
+                    self.light_intensity = torch.tensor(self.light_init_vals/torch.norm(self.light_init_vals),
+                        device=pyredner.get_device()) * torch.norm(self.light_init_vals) + self.light_modifier
+                    self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
+            
+                self.light_input_adv_list.append(self.light_intensity)
+                self.light = pyredner.PointLight(
+                    position=(self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
+                    intensity=self.light_intensity)
 
             if pose_attack:
                 self.angle_input_adv_list = []
