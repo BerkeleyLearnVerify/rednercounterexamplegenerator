@@ -38,21 +38,13 @@ lighting_attack = args.params == "lighting"
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
 
-background = "lighting/blue_white.png"
-imagenet_filename = "class_labels.json"
+background = "/home/andrew_lee/rednercounterexamplegenerator/lighting/blue_white.png"
+imagenet_filename = "/home/andrew_lee/rednercounterexamplegenerator/class_labels.json"
 
 if attack_type is None:
-    out_dir = "out/benign/" + obj_id
+    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_augmented/out/benign/" + obj_id
 else:
-    out_dir = "out/" + attack_type + "/" + args.params + "/" + obj_id
-
-#background = "/home/lakshya/rednercounterexamplegenerator/lighting/blue_white.png"
-#imagenet_filename = "/home/lakshya/rednercounterexamplegenerator/class_labels.json"
-
-#if attack_type is None:
-#    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/benign/" + obj_id
-#else:
-#    out_dir = "/home/lakshya/rednercounterexamplegenerator/out/" + attack_type + "/" + args.params + "/" + obj_id
+    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_augmented/out/" + attack_type + "/" + args.params + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 #changed!
@@ -75,7 +67,7 @@ for hashcode in hashcodes:
                                           vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "PGD":
-                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, lighting_epsilon=8000, 
+                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, lighting_epsilon=8000,
                                          vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000, vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "CW":
