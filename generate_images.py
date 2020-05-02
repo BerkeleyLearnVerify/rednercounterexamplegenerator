@@ -38,13 +38,13 @@ lighting_attack = args.params == "lighting"
 print("Vertex Attack: ", vertex_attack)
 print("Pose Attack: ", pose_attack)
 
-background = "/home/andrew_lee/rednercounterexamplegenerator/lighting/blue_white.png"
-imagenet_filename = "/home/andrew_lee/rednercounterexamplegenerator/class_labels.json"
+background = "lighting/blue_white.png"
+imagenet_filename = "class_labels.json"
 
 if attack_type is None:
-    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_augmented/out/benign/" + obj_id
+    out_dir = "out/benign/" + obj_id
 else:
-    out_dir = "/nfs/diskstation/andrew_lee/cs294/shapenet_redner_augmented/out/" + attack_type + "/" + args.params + "/" + obj_id
+    out_dir = "out/" + attack_type + "/" + args.params + "/" + obj_id
 
 #NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
 #changed!

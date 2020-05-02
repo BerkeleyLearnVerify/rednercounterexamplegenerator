@@ -19,9 +19,9 @@ num_ftrs = vgg16.classifier[6].in_features
 vgg16.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
 
 if not torch.cuda.is_available():
-    vgg16.load_state_dict(torch.load('shapenet_vgg/model_ft.pt', map_location=lambda storage, location: storage))
+    vgg16.load_state_dict(torch.load('torch_models/model_ft.pt', map_location=lambda storage, location: storage))
 else:
-    vgg16.load_state_dict(torch.load('shapenet_vgg/model_ft.pt'))
+    vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
 
 def set_grad(var):
     def hook(grad):
