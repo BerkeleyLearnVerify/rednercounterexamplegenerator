@@ -7,7 +7,7 @@ import torchvision
 from torchvision import models, transforms
 import matplotlib.pyplot as plt
 import time
-import os
+import os, sys
 import copy
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
@@ -144,6 +144,9 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
 
 if __name__ == '__main__':
 
+    dataset_path = sys.argv[1]
+    model_path = sys.argv[2]
+
     NUM_CLASSES = 12
     feature_extract = False
 
@@ -155,7 +158,7 @@ if __name__ == '__main__':
 
     print(model_ft)
 
-    shape_dataset = ShapeNetRednerDataset('/nfs/diskstation/andrew_lee/cs294/shapenet_redner_imgs/out/benign',
+    shape_dataset = ShapeNetRednerDataset(dataset_path,
                             transforms.Compose([
                                 transforms.ToTensor(),
                                 transforms.Normalize([0.6109, 0.7387, 0.7765],
@@ -222,4 +225,4 @@ if __name__ == '__main__':
                                             'val': shape_val_dataloader },
                                  criterion, optimizer_ft, num_epochs=20)
 
-    torch.save(model_ft.state_dict(), 'model_ft.pt')
+    torch.save(model_ft.state_dict(), model_path)

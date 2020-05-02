@@ -28,9 +28,11 @@ input_size = 224
 
 print(model_ft)
 
-path = sys.argv[1]
+model_path = sys.argv[1]
+dataset_path = sys.argv[2]
+predictions_file = sys.argv[3]
 
-shape_dataset = ShapeNetRednerDataset(path,
+shape_dataset = ShapeNetRednerDataset(dataset_path,
                         transforms.Compose([
                             transforms.ToTensor(),
                             transforms.Normalize([0.6109, 0.7387, 0.7765],
@@ -43,7 +45,7 @@ print('device:', device)
 # Send the model to GPU
 model_ft = model_ft.to(device)
 
-model_ft.load_state_dict(torch.load('model_ft.pt'))
+model_ft.load_state_dict(torch.load(model_path))
 model_ft.eval()
 
 shape_dataloader = torch.utils.data.DataLoader(shape_dataset, batch_size=1,
@@ -64,5 +66,5 @@ for i, (inputs, labels) in enumerate(tqdm(shape_dataloader)):
 
 acc_tracker.show()
 json.dump(acc_tracker.predictions,
-          open(os.path.join(path, 'predictions.json'), 'w'),
+          open(os.path.join(dataset_path, predictions_file), 'w'),
           indent=0)
