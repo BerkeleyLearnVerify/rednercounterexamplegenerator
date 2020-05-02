@@ -196,7 +196,7 @@ class SemanticPerturbations:
             self.light_input_orig_list = []
             self.light_input_adv_list = []
             self.light_modifier = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
-            self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0])
+            self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0], device=pyredner.get_device())
             if self.clamp_fn == "tanh":
                 self.light_intensity = torch.norm(self.light_init_vals) * tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals))) + self.light_modifier
                 self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
