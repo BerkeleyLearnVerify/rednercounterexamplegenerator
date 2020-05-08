@@ -41,7 +41,6 @@ sample_size = 0
 v = PixelPerturb(framework=vgg16, framework_shape=(224,224), normalize_params=vgg_params)
 for image_name in image_names:
     img = plt.imread(ROOT_DIR + args.img_dir + "/" + image_name)[:, :, :3]
-    pred, img = v.CW(img, iters=5, lr=0.01, label=label)
     #out_dir += "/" + hashcode
     try:
         if attack_type == "FGSM":

@@ -165,7 +165,7 @@ class PixelPerturb:
             nan_count = 0
             old_modifier = img_modifier.clone().detach()
             img_modifier.data -= (img_modifier.grad/torch.norm(img_modifier.grad)) * lr
-            print(img_modifier)
+            # print(img_modifier)
             img = self._tanh_rescale(self._torch_arctanh(orig_img) - old_modifier + img_modifier)
             modified_img = img
 
