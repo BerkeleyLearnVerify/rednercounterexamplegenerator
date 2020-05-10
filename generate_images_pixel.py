@@ -44,7 +44,7 @@ for image_name in image_names:
     #out_dir += "/" + hashcode
     try:
         if attack_type == "FGSM":
-            pred, img = v.FGSM(img, iters=5, eps=0.01, label=label)
+            pred, img = v.FGSM(img, iters=5, eps=0.007, label=label)
             plt.imsave(ROOT_DIR + out_dir + "/" + image_name, np.clip(img, 0, 1))
         elif attack_type == "PGD":
             pred, img = v.PGD(img, iters=5, lr=0.1, epsilon=0.025, label=label)

@@ -1,4 +1,7 @@
 from redner_adv import *
+import torch
+import torchvision.transforms as transforms
+import torchvision.models.vgg as vgg
 import argparse
 import os
 
@@ -11,6 +14,17 @@ parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'righ
 parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD', 'CW'])
 parser.add_argument('--params', type=str, choices=["vertex", "pose", "lighting", "all"], default="all")
 #for vgg16, shape is (224,224)
+
+# PREPROCESSING CODE THAT SHAPES THE NETWORK TO OUR SHAPENET DATASET #
+NUM_CLASSES = 12
+vgg16 = vgg.vgg16(pretrained=True)
+num_ftrs = vgg16.classifier[6].in_features
+vgg16.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
+
+if not torch.cuda.is_available():
+    vgg16.load_state_dict(torch.load('torch_models/model_ft.pt', map_location=lambda storage, location: storage))
+else:
+    vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
 
 args = parser.parse_args()
 
@@ -57,22 +71,23 @@ for hashcode in hashcodes:
     for pose in poses:
         obj_filename = "../../ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         try:
-            v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose, attack_type=attack_type)
+            v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), 
+                                        normalize_params=vgg_params, background=background, pose=pose, num_classes=NUM_CLASSES, attack_type=attack_type)
             if attack_type is None:
                 v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
                 print("\n\n\n")
                 continue
             elif attack_type == "FGSM":
-                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_eps=0.002, pose_eps=0.15, lighting_eps=4000,
-                                          vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
+                pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_eps=0.002, pose_eps=0.15, lighting_eps=4000,
+                                            vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "PGD":
-                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, lighting_epsilon=8000,
-                                         vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000, vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
+                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, lighting_epsilon=8000,
+                                            vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000, vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             elif attack_type == "CW":
-                pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose, steps=5, vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000,
-                                         vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack, target=target)
+                pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000,
+                                            vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack, target=target)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
             print(pred.item())
             print(label)

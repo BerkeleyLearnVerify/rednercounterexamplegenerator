@@ -1,28 +1,16 @@
 import torch
 import torchvision
 import torchvision.transforms as transforms
-import torchvision.models.vgg as vgg
 import pyredner
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
-import urllib
-import zipfile
-import requests
 import json
 import numpy as np
-import argparse
 import torch.nn as nn
 
-NUM_CLASSES = 12
-vgg16 = vgg.vgg16(pretrained=True)
-num_ftrs = vgg16.classifier[6].in_features
-vgg16.classifier[6] = nn.Linear(num_ftrs, NUM_CLASSES)
-
-if not torch.cuda.is_available():
-    vgg16.load_state_dict(torch.load('torch_models/model_ft.pt', map_location=lambda storage, location: storage))
-else:
-    vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
-
+"""
+A function that acts as the hook for the variables in our pipeline. We take all nan gradients and zero them out.
+"""
 def set_grad(var):
     def hook(grad):
         grad[grad != grad] = 0
@@ -30,8 +18,10 @@ def set_grad(var):
 
     return hook
 
-
-# the below method was sampled, with approval, from Rehan Durrani's work at https://github.com/harbor-ml/modelzoo/
+"""
+A helper utility function that takes in a json filename that maps indexes to dataset class names. 
+The below method was sampled, with approval, from Rehan Durrani's work at https://github.com/harbor-ml/modelzoo/
+"""
 def get_label_names(filename):
     with open(filename, 'r') as f:
         detect_labels = {
@@ -39,7 +29,10 @@ def get_label_names(filename):
         }
     return detect_labels
 
-
+"""
+x: a tensor (torch or numpy)
+Simple reduce sum function that takes a tensor and does the reduce sum operation.
+"""
 def reduce_sum(x, keepdim=True):
     # silly PyTorch, when will you get proper reducing sums/means?
     for a in reversed(range(1, x.dim())):
@@ -47,7 +40,9 @@ def reduce_sum(x, keepdim=True):
 
     return x
 
-
+"""
+takes in two tensors, x and y, and computes and returns l2 distance between them
+"""
 def l2_dist(x, y, keepdim=True):
     d = None
     for x_i, y_i in zip(x, y):
@@ -58,19 +53,35 @@ def l2_dist(x, y, keepdim=True):
 
     return d
 
-
+"""
+arctanh function for Carlini-Wagner attack
+"""
 def torch_arctanh(x, eps=1e-6):
     x *= (1. - eps)
     return (torch.log((1 + x) / (1 - x))) * 0.5
 
-
+"""
+rescaling the tanh for Carlini-Wagner attack
+"""
 def tanh_rescale(x, x_min=-1., x_max=1.):
     return (torch.tanh(x) + 1) * 0.5 * (x_max - x_min) + x_min
 
 
 class SemanticPerturbations:
-    def __init__(self, framework, filename, dims, label_names, normalize_params, background, pose,
+    """
+    framework: The object classification framework to be used and attacked. 
+    filename: the .obj file to read the object from.
+    dims: the input image dimension (excluding the # of channels) of the classification framework -- e.g. for VGG16, it's (224,224)
+    label_names: the dictionary of indexes/labels -> label names 
+    normalize_params: the mean/std. dev of the dataset.
+    background: the background image filename to blend the object against.
+    pose: for now, we provide 4 choices for object pose: 'left', 'right', 'forward', 'top'
+    attack_type: what attack to perform for this framework: 'FGSM', 'CW', 'PGD' are the 3 choices. 
+    """
+    def __init__(self, framework, filename, dims, label_names, normalize_params, background, pose, num_classes,
                  attack_type="benign"):
+
+        self.NUM_CLASSES = num_classes
         self.framework = framework.to(pyredner.get_device())
         self.image_dims = dims
         self.label_names = label_names
@@ -215,18 +226,22 @@ class SemanticPerturbations:
         background = pyredner.imread(background)
         self.background = background.to(pyredner.get_device())
 
-    # image: the torch variable holding the image
-    # net_out: the output of the framework on the image
-    # label: an image label (given as an integer index)
-    # returns: the gradient of the image w.r.t the given label
+    """
+    image: the torch variable holding the image
+    net_out: the output of the framework on the image
+    label: an image label (given as an integer index)
+    returns: the gradient of the image w.r.t the given label
+    """
     def _get_gradients(self, image, net_out, label):
         score = net_out[0][label]
         score.backward(retain_graph=True)
         # return image.grad
 
-    # classifies the input image
-    # image: np array of input image
-    # label: correct class label for image
+    """
+    Classifies the input image according to self.framework.
+    image: np array of input image
+    label: correct class label for image
+    """
     def classify(self, image):
         self.framework.eval()
         # transform image before classifying by standardizing values
@@ -242,19 +257,15 @@ class SemanticPerturbations:
         probs, top5 = torch.topk(fwd, 5, 1, True, True)
         top5 = top5[0]
         probs = probs[0]
-        # probs = torch.nn.functional.softmax(fwd[0], dim=0).data.numpy()
-        # top3 = np.argsort(probs)[-3:][::-1]
+        
         labels = [(self.label_names[label.item()], probs[idx].item()) for idx, label in enumerate(top5)]
         print("Top 5: ", labels)
         prediction_idx = top5[0]
 
-        # prediction_idx = int(torch.argmax(fwd[0]))
-        # prediction = self.label_names[prediction_idx]
         return prediction_idx, fwd
 
-    # You might need to combine the detector and the renderer into one class...this will enable you to retrieve gradients of the placement w.r.t the input stuff
 
-    # model the scene based on current instance params
+    # Model the scene based on current instance params
     def _model(self):
         # Get the rotation matrix from Euler angles
         rotation_matrix = pyredner.gen_rotate_matrix(self.euler_angles)
@@ -285,7 +296,11 @@ class SemanticPerturbations:
         img = pyredner.render_deferred(scene, lights=[self.light], alpha=True)
         return img
 
-    # render the image properly and downsample it to the right dimensions
+    """
+    Render the image properly and downsample it to the right dimensions
+    out_dir = the directory you want to save the image in
+    filename = the image file name
+    """
     def render_image(self, out_dir=None, filename=None):
         if (out_dir is None) is not (filename is None):
             raise Exception("must provide both out dir and filename if you wish to save the image")
@@ -318,8 +333,24 @@ class SemanticPerturbations:
 
         return img.permute(0, 1, 3, 2)
 
-    # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
-    # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
+    """
+    Does an FGSM attack on the image to induce misclassification. 
+    If you want to move away from a specific class, then subtract. 
+    Else, if you want to move towards a specific class, then add the gradient instead.
+    
+    label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
+    out_dir: the directory the image should be saved in (default None; don't change if you don't wish to save the image!)
+    save_title: the image name of the image (e.g. "car_left.png"). Default None
+    steps: an integer that is the number of steps you wish to perform FGSM for, Default 5.
+    vertex_eps: the epsilon for the vertex FGSM attack. Default 0.001
+    pose_eps: the epsilon for the pose FGSM attack. Default 0.05
+    lighting_eps: the epsilon for the lighting FGSM attack. Default 4000 -- this is due to the intensity scale.
+    vertex_attack: whether the vertex component should be attacked or not. True by default.
+    pose_attack: whether the pose component should be attacked or not. True by default.
+    lighting_attack: whether the lighting should be attacked or not.
+
+    RETURNS: Prediction, image (but transposed -- e.g. the shape provided would be (3,224,224) instead of (224,224,3))
+    """
     def attack_FGSM(self, label, out_dir=None, save_title=None, steps=5, vertex_eps=0.001, pose_eps=0.05, lighting_eps=4000,
                     vertex_attack=True, pose_attack=True, lighting_attack=False):
         if out_dir is not None and save_title is None:
@@ -327,10 +358,7 @@ class SemanticPerturbations:
         elif save_title is not None and out_dir is None:
             raise Exception("Must provide directory if image is to be saved")
 
-        if save_title is not None:
-            filename = save_title + ".png"
-        else:
-            filename = save_title
+        filename = save_title
 
         # classify
         img = self.render_image(out_dir=out_dir, filename=filename)
@@ -362,9 +390,6 @@ class SemanticPerturbations:
                         shape.vertices -= torch.sign(
                             shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta)) * vertex_eps
 
-            # self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
-            # self.translation.retain_grad()
-            # print(self.euler_angles)
             if pose_attack:
                 self.euler_angles.data -= torch.sign(
                     self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta)) * pose_eps
@@ -374,16 +399,32 @@ class SemanticPerturbations:
                 light_sub = torch.min(self.light.intensity.data, light_sub)
                 self.light.intensity.data -= light_sub
 
-            # print("rotation grad: ", self.euler_angles.grad)
-            # optimizer.step()
-
             img = self.render_image(out_dir=out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
         return final_pred, img
 
-    # does a gradient attack on the image to induce misclassification. if you want to move away from a specific class
-    # then subtract. else, if you want to move towards a specific class, then add the gradient instead.
+    """
+    Does a PGD attack on the image to induce misclassification. 
+    If you want to move away from a specific class, then subtract. 
+    Else, if you want to move towards a specific class, then add the gradient instead.
+    
+    label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
+    out_dir: the directory the image should be saved in (leave this as None if you don't wish to save the image!)
+    save_title: the image name of the image (e.g. "car_left.png"). Default None
+    steps: an integer that is the number of steps you wish to perform PGD for. Default 5
+    vertex_epsilon: the epsilon bound for the vertex PGD attack. Default 1.0
+    pose_epsilon: the epsilon bound for the pose PGD attack. Default 1.0
+    lighting_epsilon: the epsilon bound for the lighting PGD attack. Default 4000 -- this is due to the intensity scale.
+    vertex_lr: the learning rate for the vertex PGD attack. Default 0.001
+    pose_lr: the learning rate for the pose PGD attack. Default 0.05
+    lighting_lr: the learning rate for the lighting PGD attack. Default 4000 -- this is due to the intensity scale.
+    vertex_attack: whether the vertex component should be attacked or not. True by default.
+    pose_attack: whether the pose component should be attacked or not. True by default.
+    lighting_attack: whether the lighting should be attacked or not.
+
+    RETURNS: Prediction, image (but transposed -- e.g. the shape provided would be (3,224,224) instead of (224,224,3))
+    """
     def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
                    vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0,
                    vertex_attack=True, pose_attack=True, lighting_attack=False):
@@ -393,10 +434,7 @@ class SemanticPerturbations:
         elif save_title is not None and out_dir is None:
             raise Exception("Must provide directory if image is to be saved")
 
-        if save_title is not None:
-            filename = save_title + ".png"
-        else:
-            filename = save_title
+        filename = save_title
 
         # classify
         img = self.render_image(out_dir=out_dir, filename=filename)
@@ -429,9 +467,6 @@ class SemanticPerturbations:
                             shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr,
                             -vertex_epsilon, vertex_epsilon)
 
-            # self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
-            # self.translation.retain_grad()
-            # print(self.euler_angles)
             if lighting_attack:
                 light_sub = torch.clamp(
                     self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr, -lighting_epsilon,
@@ -444,15 +479,14 @@ class SemanticPerturbations:
                     self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr, -pose_epsilon,
                     pose_epsilon)
 
-            # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
-            # print("rotation grad: ", self.euler_angles.grad)
-            # optimizer.step()
-
             img = self.render_image(out_dir=out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
         return final_pred, img
 
+    """
+    The Carlini-Wagner loss.
+    """
     def cw_loss(self, output, target, dist, scale_const):
         # compute the probability of the label class versus the maximum other
         real = (target * output).sum(1)
@@ -470,6 +504,25 @@ class SemanticPerturbations:
         loss = loss1 + loss2
         return loss
 
+    """
+    Does a Carlini-Wagner attack on the image to induce misclassification. 
+    If you want to move away from a specific class, then subtract. 
+    Else, if you want to move towards a specific class, then add the gradient instead.
+    
+    label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
+    out_dir: the directory the image should be saved in (default None; don't change if you don't wish to save the image!)
+    save_title: the image name of the image (e.g. "car_left.png"). Default None
+    steps: an integer that is the number of steps you wish to perform CW for, Default 5.
+    vertex_lr: the epsilon for the vertex CW attack. Default 0.001
+    pose_lr: the epsilon for the pose CW attack. Default 0.05
+    lighting_eps: the epsilon for the lighting CW attack. Default 8000 -- this is due to the intensity scale.
+    vertex_attack: whether the vertex component should be attacked or not. True by default.
+    pose_attack: whether the pose component should be attacked or not. True by default.
+    lighting_attack: whether the lighting should be attacked or not.
+    target: the target label. Default None.
+
+    RETURNS: Prediction, image (but transposed -- e.g. the shape provided would be (3,224,224) instead of (224,224,3))
+    """
     def attack_cw(self, label, out_dir=None, save_title=None, steps=5,
                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
                   vertex_attack=True, pose_attack=True, lighting_attack=False, target=None):
@@ -479,10 +532,7 @@ class SemanticPerturbations:
         elif save_title is not None and out_dir is None:
             raise Exception("Must provide directory if image is to be saved")
 
-        if save_title is not None:
-            filename = save_title + ".png"
-        else:
-            filename = save_title
+        filename = save_title
 
         # classify
         img = self.render_image(out_dir=out_dir, filename=filename)
@@ -493,7 +543,7 @@ class SemanticPerturbations:
         else:
             target = torch.tensor([label]).to(pyredner.get_device())
 
-        target_onehot = torch.zeros(target.size() + (NUM_CLASSES,)).to(pyredner.get_device())
+        target_onehot = torch.zeros(target.size() + (self.NUM_CLASSES,)).to(pyredner.get_device())
         target_onehot.scatter_(1, target.unsqueeze(1), 1.)
 
         # only there to zero out gradients.
@@ -503,11 +553,7 @@ class SemanticPerturbations:
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
             if pred.item() != label and i != 0:
-                #print("misclassification at step ", i)
-                #plt.imsave(out_dir + "/" + filename, np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
                 return pred, img
-            # get gradients
-            # self._get_gradients(img.cpu(), net_out, label)
 
             loss = 0
             if vertex_attack:
@@ -521,7 +567,10 @@ class SemanticPerturbations:
             if lighting_attack:
                 dist = l2_dist(self.light_input_adv_list, self.light_input_orig_list, False)
                 loss += self.cw_loss(net_out, target_onehot, dist, 0.1)
+
+            # get gradients
             loss.backward(retain_graph=True)
+
             delta = 1e-6
             inf_count = 0
             nan_count = 0
@@ -553,10 +602,6 @@ class SemanticPerturbations:
 
                     self.input_adv_list.append(shape.vertices)
 
-
-            # self.translation = self.translation - torch.sign(self.translation.grad/torch.norm(self.translation.grad) + delta) * eps
-            # self.translation.retain_grad()
-            # print(self.euler_angles)
             if lighting_attack:
                 self.light_input_orig_list = []
                 self.light_input_adv_list = []
@@ -625,58 +670,7 @@ class SemanticPerturbations:
 
                 self.angle_input_adv_list.append(self.euler_angles)
 
-
-
-
-            # self.euler_angles.data -= torch.sign(self.euler_angles.grad/(torch.norm(self.euler_angles.grad) + delta)) * eps
-            # print("rotation grad: ", self.euler_angles.grad)
-            # optimizer.step()
-
             img = self.render_image(out_dir = out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
         return final_pred, img
-
-#######################
-#### USAGE EXAMPLE ####
-#######################
-
-# #for vgg16, shape is (224,224)
-# parser = argparse.ArgumentParser()
-# parser.add_argument('--id', type=str)
-# parser.add_argument('--hashcode', type=str)
-# parser.add_argument('--label', type=int)
-# parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right'])
-# parser.add_argument('--attack', type=str, choices=['FGSM'])
-
-# args = parser.parse_args()
-# label = args.label
-# attack_type = args.attack
-# pose = args.pose
-# hashcode = args.hashcode
-# obj_id = args.id
-
-# background = "lighting/blue_white.png"
-# imagenet_filename = "imagenet_labels.json"
-
-# vgg_params = {'mean': torch.tensor([0.485, 0.456, 0.406]), 'std': torch.tensor([0.229, 0.224, 0.225])}
-# obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + args.hashcode + "/models/model_normalized.obj"
-
-# if attack_type is None:
-#     out_dir = "out/benign/" + obj_id
-# else:
-#     out_dir = "out/" + attack_type + "/" + obj_id
-
-# #out_dir += "/" + hashcode
-
-# v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), normalize_params=vgg_params, background=background, pose=pose)
-# #v.attack_FGSM(label, out_dir)
-# v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
-
-# if attack_type == "FGSM":
-#     v.attack_FGSM(label, out_dir, filename=hashcode + '_' + pose)
-
-
-# a note: to insert any other obj detection framework, you must simply load the model in, get the mean/stddev of the data per channel in an image
-# and get the index to label mapping (the last two steps are only needed(if not trained on imagenet, which is provided above),
-# now, you have a fully generic library that can read in any .obj file, classify the image, and induce a misclassification through the attack alg
