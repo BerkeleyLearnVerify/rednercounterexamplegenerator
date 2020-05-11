@@ -80,15 +80,15 @@ for hashcode in hashcodes:
             elif attack_type == "FGSM":
                 pred, img = v.attack_FGSM(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_eps=0.002, pose_eps=0.15, lighting_eps=4000,
                                             vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
-                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
+                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", img)
             elif attack_type == "PGD":
                 pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, lighting_epsilon=8000,
                                             vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000, vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
-                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
+                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", img)
             elif attack_type == "CW":
                 pred, img = v.attack_cw(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000,
                                             vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack, target=target)
-                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1))
+                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", img)
             print(pred.item())
             print(label)
             total_errors += (pred.item() != label)

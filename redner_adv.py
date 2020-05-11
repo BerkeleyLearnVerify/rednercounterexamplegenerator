@@ -349,7 +349,7 @@ class SemanticPerturbations:
     pose_attack: whether the pose component should be attacked or not. True by default.
     lighting_attack: whether the lighting should be attacked or not.
 
-    RETURNS: Prediction, image (but transposed -- e.g. the shape provided would be (3,224,224) instead of (224,224,3))
+    RETURNS: Prediction, 3-channel image
     """
     def attack_FGSM(self, label, out_dir=None, save_title=None, steps=5, vertex_eps=0.001, pose_eps=0.05, lighting_eps=4000,
                     vertex_attack=True, pose_attack=True, lighting_attack=False):
@@ -370,7 +370,8 @@ class SemanticPerturbations:
             pred, net_out = self.classify(img)
             if pred.item() != label and i != 0:
                 print("misclassification at step ", i)
-                return pred, img
+                final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+                return pred, final_image
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
 
@@ -402,7 +403,8 @@ class SemanticPerturbations:
             img = self.render_image(out_dir=out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
-        return final_pred, img
+        final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+        return final_pred, final_image
 
     """
     Does a PGD attack on the image to induce misclassification. 
@@ -423,7 +425,7 @@ class SemanticPerturbations:
     pose_attack: whether the pose component should be attacked or not. True by default.
     lighting_attack: whether the lighting should be attacked or not.
 
-    RETURNS: Prediction, image (but transposed -- e.g. the shape provided would be (3,224,224) instead of (224,224,3))
+    RETURNS: Prediction, 3-channel image
     """
     def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
                    vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0,
@@ -447,7 +449,8 @@ class SemanticPerturbations:
             pred, net_out = self.classify(img)
             if pred.item() != label and i != 0:
                 print("misclassification at step ", i)
-                return pred, img
+                final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+                return pred, final_image
             # get gradients
             self._get_gradients(img.cpu(), net_out, label)
             delta = 1e-6
@@ -482,7 +485,8 @@ class SemanticPerturbations:
             img = self.render_image(out_dir=out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
-        return final_pred, img
+        final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+        return final_pred, final_image
 
     """
     The Carlini-Wagner loss.
@@ -521,7 +525,7 @@ class SemanticPerturbations:
     lighting_attack: whether the lighting should be attacked or not.
     target: the target label. Default None.
 
-    RETURNS: Prediction, image (but transposed -- e.g. the shape provided would be (3,224,224) instead of (224,224,3))
+    RETURNS: Prediction, 3-channel image
     """
     def attack_cw(self, label, out_dir=None, save_title=None, steps=5,
                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
@@ -553,7 +557,8 @@ class SemanticPerturbations:
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
             if pred.item() != label and i != 0:
-                return pred, img
+                final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+                return pred, final_image
 
             loss = 0
             if vertex_attack:
@@ -673,4 +678,5 @@ class SemanticPerturbations:
             img = self.render_image(out_dir = out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
-        return final_pred, img
+        final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+        return final_pred, final_image
