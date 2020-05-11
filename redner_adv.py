@@ -604,28 +604,8 @@ class SemanticPerturbations:
                 self.euler_angles = self.euler_angles.clone().detach() - self.euler_angles_modifier.clone().detach()
                 self.euler_angles_modifier.data -= self.euler_angles_modifier.grad / (
                             torch.norm(self.euler_angles_modifier.grad) + delta) * pose_lr
-
-                if self.pose == 'forward':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                elif self.pose == 'top':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0.35, 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                elif self.pose == 'left':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0., 0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                elif self.pose == 'right':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0., -0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-
+                self.euler_angles = tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                self.angle_input_orig_list.append(tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
                 self.angle_input_adv_list.append(self.euler_angles)
 
             img = self.render_image(out_dir = out_dir, filename=filename)
