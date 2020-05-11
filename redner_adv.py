@@ -107,12 +107,8 @@ class SemanticPerturbations:
                 vertices.append(mesh.vertices)
                 modifier = torch.zeros(mesh.vertices.size(), requires_grad=True, device=pyredner.get_device())
                 self.modifiers.append(modifier)
-                if self.clamp_fn == "tanh":
-                    self.input_orig_list.append(tanh_rescale(torch_arctanh(mesh.vertices)))
-                    mesh.vertices = tanh_rescale(torch_arctanh(mesh.vertices) + modifier)
-                else:
-                    self.input_orig_list.append(mesh.vertices)
-                    mesh.vertices = mesh.vertices + modifier
+                self.input_orig_list.append(tanh_rescale(torch_arctanh(mesh.vertices)))
+                mesh.vertices = tanh_rescale(torch_arctanh(mesh.vertices) + modifier)
 
                 self.input_adv_list.append(mesh.vertices)
                 mesh.vertices.retain_grad()
@@ -152,44 +148,26 @@ class SemanticPerturbations:
         self.pose = pose
         if attack_type == "CW":
             self.euler_angles_modifier = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
-            if self.clamp_fn == "tanh":
-                if pose == 'forward':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                elif pose == 'top':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0.35, 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                elif pose == 'left':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0., 0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                elif pose == 'right':
-                    self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0., -0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                    self.angle_input_orig_list.append(
-                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-            else:
-                if pose == 'forward':
-                    self.euler_angles = torch.tensor([0., 0., 0.],
-                                                     device=pyredner.get_device()) + self.euler_angles_modifier
-                    self.angle_input_orig_list.append(torch.tensor([0., 0., 0.], device=pyredner.get_device()))
-                elif pose == 'top':
-                    self.euler_angles = torch.tensor([0.35, 0., 0.],
-                                                     device=pyredner.get_device()) + self.euler_angles_modifier
-                    self.angle_input_orig_list.append(torch.tensor([0.35, 0., 0.], device=pyredner.get_device()))
-                elif pose == 'left':
-                    self.euler_angles = torch.tensor([0., 0.50, 0.],
-                                                     device=pyredner.get_device()) + self.euler_angles_modifier
-                    self.angle_input_orig_list.append(torch.tensor([0., 0.50, 0.], device=pyredner.get_device()))
-                elif pose == 'right':
-                    self.euler_angles = torch.tensor([0., -0.50, 0.],
-                                                     device=pyredner.get_device()) + self.euler_angles_modifier
-                    self.angle_input_orig_list.append(torch.tensor([0., -0.50, 0.], device=pyredner.get_device()))
+            if pose == 'forward':
+                self.euler_angles = tanh_rescale(torch_arctanh(
+                    torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                self.angle_input_orig_list.append(
+                    tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+            elif pose == 'top':
+                self.euler_angles = tanh_rescale(torch_arctanh(
+                    torch.tensor([0.35, 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                self.angle_input_orig_list.append(
+                    tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+            elif pose == 'left':
+                self.euler_angles = tanh_rescale(torch_arctanh(
+                    torch.tensor([0., 0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                self.angle_input_orig_list.append(
+                    tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+            elif pose == 'right':
+                self.euler_angles = tanh_rescale(torch_arctanh(
+                    torch.tensor([0., -0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                self.angle_input_orig_list.append(
+                    tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
 
             self.angle_input_adv_list.append(self.euler_angles)
         else:
@@ -205,15 +183,13 @@ class SemanticPerturbations:
         if attack_type == "CW":
             self.light_input_orig_list = []
             self.light_input_adv_list = []
+            delta = 1e-6 # constant for stability
             self.light_modifier = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
             self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0], device=pyredner.get_device())
-            if self.clamp_fn == "tanh":
-                self.light_intensity = torch.norm(self.light_init_vals) * tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals))) + self.light_modifier
-                self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
-            else:
-                self.light_intensity = torch.tensor(self.light_init_vals/torch.norm(self.light_init_vals),
-                    device=pyredner.get_device()) * torch.norm(self.light_init_vals) + self.light_modifier
-                self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
+            # redner can't accept negative light intensities, so we have to be a bit creative and work with lighting norms instead and then rescale them afterwards...
+            tanh_factor = tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals)) + self.light_modifier/torch.norm(self.light_modifier + delta))
+            self.light_intensity = torch.norm(self.light_init_vals) * torch.clamp(tanh_factor, 0, 1)
+            self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
             self.light_input_adv_list.append(self.light_intensity)
             self.light = pyredner.PointLight(
                 position=(self.camera.position + torch.tensor((0.0, 0.0, 100.0))).to(pyredner.get_device()),
@@ -598,12 +574,8 @@ class SemanticPerturbations:
 
 
                 for shape, m in zip(self.shapes, self.modifiers):
-                    if self.clamp_fn == "tanh":
-                        self.input_orig_list.append(tanh_rescale(torch_arctanh(shape.vertices)))
-                        shape.vertices = tanh_rescale(torch_arctanh(shape.vertices) + m)
-                    else:
-                        self.input_orig_list.append(shape.vertices)
-                        shape.vertices = shape.vertices + m
+                    self.input_orig_list.append(tanh_rescale(torch_arctanh(shape.vertices)))
+                    shape.vertices = tanh_rescale(torch_arctanh(shape.vertices) + m)
 
                     self.input_adv_list.append(shape.vertices)
 
@@ -612,14 +584,13 @@ class SemanticPerturbations:
                 self.light_input_adv_list = []
                 self.light_intensity = self.light_intensity.clone().detach() - self.light_modifier.clone().detach()
                 self.light_modifier.data -= self.light_modifier.grad / (torch.norm(self.light_modifier.grad) + delta) * lighting_lr
-                if self.clamp_fn == "tanh":
-                    self.light_init_vals = self.light_intensity.clone().detach()
-                    self.light_intensity = torch.norm(self.light_init_vals) * tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals))) + self.light_modifier
-                    self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
-                else:
-                    self.light_intensity = torch.tensor(self.light_init_vals/torch.norm(self.light_init_vals),
-                        device=pyredner.get_device()) * torch.norm(self.light_init_vals) + self.light_modifier
-                    self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
+
+                self.light_init_vals = self.light_intensity.clone().detach()
+                # redner can't accept negative light intensities, so we have to be a bit creative and work with lighting norms instead and then rescale them afterwards...
+                tanh_factor = tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals)) + self.light_modifier/torch.norm(self.light_modifier + delta))
+                self.light_intensity = torch.norm(self.light_init_vals) * torch.clamp(tanh_factor, 0, 1)
+                print(self.light_intensity)
+                self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
             
                 self.light_input_adv_list.append(self.light_intensity)
                 self.light = pyredner.PointLight(
@@ -634,44 +605,26 @@ class SemanticPerturbations:
                 self.euler_angles_modifier.data -= self.euler_angles_modifier.grad / (
                             torch.norm(self.euler_angles_modifier.grad) + delta) * pose_lr
 
-                if self.clamp_fn == "tanh":
-                    if self.pose == 'forward':
-                        self.euler_angles = tanh_rescale(torch_arctanh(
-                            torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                        self.angle_input_orig_list.append(
-                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                    elif self.pose == 'top':
-                        self.euler_angles = tanh_rescale(torch_arctanh(
-                            torch.tensor([0.35, 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                        self.angle_input_orig_list.append(
-                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                    elif self.pose == 'left':
-                        self.euler_angles = tanh_rescale(torch_arctanh(
-                            torch.tensor([0., 0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                        self.angle_input_orig_list.append(
-                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                    elif self.pose == 'right':
-                        self.euler_angles = tanh_rescale(torch_arctanh(
-                            torch.tensor([0., -0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-                        self.angle_input_orig_list.append(
-                            tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
-                else:
-                    if self.pose == 'forward':
-                        self.euler_angles = torch.tensor([0., 0., 0.],
-                                                         device=pyredner.get_device()) + self.euler_angles_modifier
-                        self.angle_input_orig_list.append(torch.tensor([0., 0., 0.], device=pyredner.get_device()))
-                    elif self.pose == 'top':
-                        self.euler_angles = torch.tensor([0.35, 0., 0.],
-                                                         device=pyredner.get_device()) + self.euler_angles_modifier
-                        self.angle_input_orig_list.append(torch.tensor([0.35, 0., 0.], device=pyredner.get_device()))
-                    elif self.pose == 'left':
-                        self.euler_angles = torch.tensor([0., 0.50, 0.],
-                                                         device=pyredner.get_device()) + self.euler_angles_modifier
-                        self.angle_input_orig_list.append(torch.tensor([0., 0.50, 0.], device=pyredner.get_device()))
-                    elif self.pose == 'right':
-                        self.euler_angles = torch.tensor([0., -0.50, 0.],
-                                                         device=pyredner.get_device()) + self.euler_angles_modifier
-                        self.angle_input_orig_list.append(torch.tensor([0., -0.50, 0.], device=pyredner.get_device()))
+                if self.pose == 'forward':
+                    self.euler_angles = tanh_rescale(torch_arctanh(
+                        torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                    self.angle_input_orig_list.append(
+                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+                elif self.pose == 'top':
+                    self.euler_angles = tanh_rescale(torch_arctanh(
+                        torch.tensor([0.35, 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                    self.angle_input_orig_list.append(
+                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+                elif self.pose == 'left':
+                    self.euler_angles = tanh_rescale(torch_arctanh(
+                        torch.tensor([0., 0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                    self.angle_input_orig_list.append(
+                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
+                elif self.pose == 'right':
+                    self.euler_angles = tanh_rescale(torch_arctanh(
+                        torch.tensor([0., -0.50, 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+                    self.angle_input_orig_list.append(
+                        tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device()))))
 
                 self.angle_input_adv_list.append(self.euler_angles)
 
