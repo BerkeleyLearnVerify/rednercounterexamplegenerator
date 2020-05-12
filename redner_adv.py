@@ -251,7 +251,7 @@ class SemanticPerturbations:
         vertices = []
         if self.attack_type == "CW":
             for m, shape in zip(self.modifiers, self.shapes):
-                shape_v = shape.vertices.clone().detach() - m.clone().detach() + m
+                shape_v = tanh_rescale(torch_arctanh(shape.vertices.clone().detach()) - m.clone().detach() + m)
                 shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
                 shape.vertices.retain_grad()
                 shape.vertices.register_hook(set_grad(shape.vertices))
@@ -562,7 +562,7 @@ class SemanticPerturbations:
                 self.input_adv_list = []
 
                 for shape, m in zip(self.shapes, self.modifiers):
-                    shape.vertices = shape.vertices.clone().detach() - m.clone().detach()
+                    shape.vertices = tanh_rescale(torch_arctanh(shape.vertices.clone().detach()) - m.clone().detach())
                     if not torch.isfinite(m.grad).all():
                         inf_count += 1
                     elif torch.isnan(m.grad).any():
@@ -582,7 +582,7 @@ class SemanticPerturbations:
             if lighting_attack:
                 self.light_input_orig_list = []
                 self.light_input_adv_list = []
-                self.light_intensity = self.light_intensity.clone().detach() - self.light_modifier.clone().detach()
+                self.light_intensity = tanh_rescale(torch_arctanh(self.light_intensity.clone().detach()) - self.light_modifier.clone().detach())
                 self.light_modifier.data -= self.light_modifier.grad / (torch.norm(self.light_modifier.grad) + delta) * lighting_lr
 
                 self.light_init_vals = self.light_intensity.clone().detach()
