@@ -582,7 +582,7 @@ class SemanticPerturbations:
             if lighting_attack:
                 self.light_input_orig_list = []
                 self.light_input_adv_list = []
-                self.light_intensity = tanh_rescale(torch_arctanh(self.light_intensity.clone().detach()) - self.light_modifier.clone().detach())
+                self.light_intensity = tanh_rescale(torch_arctanh(self.light_intensity.clone().detach()) - self.light_modifier.clone().detach()/torch.norm(self.light_modifier.clone().detach() + delta))
                 self.light_modifier.data -= self.light_modifier.grad / (torch.norm(self.light_modifier.grad) + delta) * lighting_lr
 
                 self.light_init_vals = self.light_intensity.clone().detach()
