@@ -24,6 +24,7 @@ benign.render_image(out_dir="demo_out/", filename="motorcycle_demo_left_benign.p
 if not os.path.exists('./demo_out'):
 	os.mkdir('./demo_out')
 
+print("\n\n\nFGSM attack with 'left' pose\n\n\n")
 # FGSM attack on motorcycle, pose "left"
 fgsm_left = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=label_names, 
                           			normalize_params=vgg_retrained_params, background="blue_white.png", pose="left", num_classes=NUM_CLASSES, attack_type="FGSM")
@@ -31,6 +32,7 @@ fgsm_left = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_nam
 pred, img = fgsm_left.attack_FGSM(label=7, out_dir="demo_out/", save_title="motorcycle_demo_left_fgsm.png", steps=5, vertex_eps=0.002, pose_eps=0.15, 
 									pose_attack=True, vertex_attack=True)
 
+print("\n\n\nFGSM attack with 'right' pose\n\n\n")
 # FGSM attack on motorcycle, pose "right"
 fgsm_right = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=label_names, 
                           			normalize_params=vgg_retrained_params, background="blue_white.png", pose="right", num_classes=NUM_CLASSES, attack_type="FGSM")
@@ -38,16 +40,18 @@ fgsm_right = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_na
 pred, img = fgsm_right.attack_FGSM(label=7, out_dir="demo_out/", save_title="motorcycle_demo_right_fgsm.png", steps=5, vertex_eps=0.002, pose_eps=0.15, 
 									pose_attack=True, vertex_attack=True)
 
+print("\n\n\nCW attack with 'forward' pose\n\n\n")
 # Carlini-Wagner attack on motorcycle, pose "top"
 cw_right = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=label_names, 
-                          			normalize_params=vgg_retrained_params, background="blue_white.png", pose="top", num_classes=NUM_CLASSES, attack_type="CW")
+                          			normalize_params=vgg_retrained_params, background="blue_white.png", pose="forward", num_classes=NUM_CLASSES, attack_type="CW")
 
-pred, img = cw_right.attack_cw(label=7, out_dir="demo_out/", save_title="motorcycle_demo_top_cw.png", steps=5, vertex_lr=0.01, pose_lr=0.30, 
+pred, img = cw_right.attack_cw(label=7, out_dir="demo_out/", save_title="motorcycle_demo_top_cw.png", steps=5, vertex_lr=0.01, pose_lr=0.45, 
 									pose_attack=True, vertex_attack=True)
 
+print("\n\n\nPGD attack with 'top' pose\n\n\n")
 # PGD attack on motorcycle, pose "forward"
 cw_right = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=label_names, 
-                          			normalize_params=vgg_retrained_params, background="blue_white.png", pose="forward", num_classes=NUM_CLASSES, attack_type="PGD")
+                          			normalize_params=vgg_retrained_params, background="blue_white.png", pose="top", num_classes=NUM_CLASSES, attack_type="PGD")
 
 pred, img = cw_right.attack_PGD(label=7, out_dir="demo_out/", save_title="motorcycle_demo_forward_pgd.png", steps=5, vertex_epsilon=0.5, pose_epsilon=0.25,
-                                            vertex_lr=0.01, pose_lr=0.20,pose_attack=True, vertex_attack=True)
+                                            vertex_lr=0.01, pose_lr=0.35,pose_attack=True, vertex_attack=True)

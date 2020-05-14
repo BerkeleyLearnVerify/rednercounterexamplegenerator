@@ -341,7 +341,7 @@ class SemanticPerturbations:
         img = self.render_image(out_dir=out_dir, filename=filename)
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles, self.light.intensity], lr=0)
-        print("CLASSIFYING BENIGN")
+
         for i in range(steps):
             optimizer.zero_grad()
             pred, net_out = self.classify(img)
