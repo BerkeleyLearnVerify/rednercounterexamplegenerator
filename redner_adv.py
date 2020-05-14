@@ -189,6 +189,7 @@ class SemanticPerturbations:
             # redner can't accept negative light intensities, so we have to be a bit creative and work with lighting norms instead and then rescale them afterwards...
             tanh_factor = tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals)) + self.light_modifier/torch.norm(self.light_modifier + delta))
             self.light_intensity = torch.norm(self.light_init_vals) * torch.clamp(tanh_factor, 0, 1)
+
             self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
             self.light_input_adv_list.append(self.light_intensity)
             self.light = pyredner.PointLight(
@@ -582,14 +583,17 @@ class SemanticPerturbations:
             if lighting_attack:
                 self.light_input_orig_list = []
                 self.light_input_adv_list = []
-                self.light_intensity = tanh_rescale(torch_arctanh(self.light_intensity.clone().detach()) - self.light_modifier.clone().detach()/torch.norm(self.light_modifier.clone().detach() + delta))
+                # tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals)) + self.light_modifier/torch.norm(self.light_modifier + delta))
+                tanh_factor = tanh_rescale(torch_arctanh(self.light_intensity.clone().detach()/torch.norm(self.light_intensity.clone().detach())) 
+                                - self.light_modifier.clone().detach()/torch.norm(self.light_modifier.clone().detach() + delta))
+                self.light_init_vals = torch.norm(self.light_intensity.clone().detach()) * torch.clamp(tanh_factor, 0, 1)
+
                 self.light_modifier.data -= self.light_modifier.grad / (torch.norm(self.light_modifier.grad) + delta) * lighting_lr
 
-                self.light_init_vals = self.light_intensity.clone().detach()
                 # redner can't accept negative light intensities, so we have to be a bit creative and work with lighting norms instead and then rescale them afterwards...
                 tanh_factor = tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals)) + self.light_modifier/torch.norm(self.light_modifier + delta))
                 self.light_intensity = torch.norm(self.light_init_vals) * torch.clamp(tanh_factor, 0, 1)
-                print(self.light_intensity)
+
                 self.light_input_orig_list.append(self.light_init_vals/torch.norm(self.light_init_vals))
             
                 self.light_input_adv_list.append(self.light_intensity)
@@ -601,7 +605,6 @@ class SemanticPerturbations:
                 self.angle_input_adv_list = []
                 self.angle_input_orig_list = []
 
-                self.euler_angles = self.euler_angles.clone().detach() - self.euler_angles_modifier.clone().detach()
                 self.euler_angles_modifier.data -= self.euler_angles_modifier.grad / (
                             torch.norm(self.euler_angles_modifier.grad) + delta) * pose_lr
                 self.euler_angles = tanh_rescale(torch_arctanh(torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
