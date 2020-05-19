@@ -311,13 +311,65 @@ class SemanticPerturbations:
         return img.permute(0, 1, 3, 2)
 
     """
+    Does a random sampling attack on the image. 
+    
+    label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
+    out_dir: the directory the image should be saved in (default None; don't change if you don't wish to save the image!)
+    filename: the image name of the image (e.g. "car_left.png"). Default None
+    vertex_eps: the epsilon for the vertex attack. Default 0.001
+    pose_eps: the epsilon for the pose attack. Default 0.05
+    lighting_eps: the epsilon for the lighting attack. Default 4000 -- this is due to the intensity scale.
+    vertex_attack: whether the vertex component should be attacked or not. True by default.
+    pose_attack: whether the pose component should be attacked or not. True by default.
+    lighting_attack: whether the lighting should be attacked or not.
+
+    RETURNS: Prediction, 3-channel image
+    """
+    def attack_random_sample(self, label, out_dir=None, filename=None, vertex_eps=0.001, pose_eps=0.05, lighting_eps=4000,
+                    vertex_attack=True, pose_attack=True, lighting_attack=False):
+        
+        if out_dir is not None and filename is None:
+            raise Exception("Must provide image title if out dir is provided")
+        elif filename is not None and out_dir is None:
+            raise Exception("Must provide directory if image is to be saved")
+
+        if vertex_attack:
+            for shape in self.shapes:
+                shape.vertices += 10 * vertex_eps * torch.rand(shape.vertices.shape) - 5 * vertex_eps
+
+        if pose_attack:
+            self.euler_angles.data += 10 * pose_eps * torch.rand(self.euler_angles.shape) - 5 * pose_eps
+
+        if lighting_attack:
+            self.light_intensity.data += 10 * lighting_eps * torch.rand(self.light_intensity.shape) - 5 * lighting_eps
+        
+        img = self._model()
+        # just meant to prevent rotations from being stacked onto one another with the above line
+
+        alpha = img[:, :, 3:4]
+        img = img[:, :, :3] * alpha + self.background * (1 - alpha)
+
+        # Visualize the initial guess
+        eps = 1e-6
+        img = torch.pow(img + eps, 1.0 / 2.2)  # add .data to stop PyTorch from complaining
+        img = torch.nn.functional.interpolate(img.T.unsqueeze(0), size=self.image_dims, mode='bilinear')
+        
+        pred, net_out = self.classify(img)
+
+        final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+        if out_dir is not None and filename is not None:
+            plt.imsave(out_dir + "/" + filename, final_image)
+        
+        return pred, final_image
+
+    """
     Does an FGSM attack on the image to induce misclassification. 
     If you want to move away from a specific class, then subtract. 
     Else, if you want to move towards a specific class, then add the gradient instead.
     
     label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
     out_dir: the directory the image should be saved in (default None; don't change if you don't wish to save the image!)
-    save_title: the image name of the image (e.g. "car_left.png"). Default None
+    filename: the image name of the image (e.g. "car_left.png"). Default None
     steps: an integer that is the number of steps you wish to perform FGSM for, Default 5.
     vertex_eps: the epsilon for the vertex FGSM attack. Default 0.001
     pose_eps: the epsilon for the pose FGSM attack. Default 0.05
@@ -328,14 +380,12 @@ class SemanticPerturbations:
 
     RETURNS: Prediction, 3-channel image
     """
-    def attack_FGSM(self, label, out_dir=None, save_title=None, steps=5, vertex_eps=0.001, pose_eps=0.05, lighting_eps=4000,
+    def attack_FGSM(self, label, out_dir=None, filename=None, steps=5, vertex_eps=0.001, pose_eps=0.05, lighting_eps=4000,
                     vertex_attack=True, pose_attack=True, lighting_attack=False):
-        if out_dir is not None and save_title is None:
+        if out_dir is not None and filename is None:
             raise Exception("Must provide image title if out dir is provided")
-        elif save_title is not None and out_dir is None:
+        elif filename is not None and out_dir is None:
             raise Exception("Must provide directory if image is to be saved")
-
-        filename = save_title
 
         # classify
         img = self.render_image(out_dir=out_dir, filename=filename)
@@ -390,7 +440,7 @@ class SemanticPerturbations:
     
     label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
     out_dir: the directory the image should be saved in (leave this as None if you don't wish to save the image!)
-    save_title: the image name of the image (e.g. "car_left.png"). Default None
+    filename: the image name of the image (e.g. "car_left.png"). Default None
     steps: an integer that is the number of steps you wish to perform PGD for. Default 5
     vertex_epsilon: the epsilon bound for the vertex PGD attack. Default 1.0
     pose_epsilon: the epsilon bound for the pose PGD attack. Default 1.0
@@ -404,16 +454,14 @@ class SemanticPerturbations:
 
     RETURNS: Prediction, 3-channel image
     """
-    def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
+    def attack_PGD(self, label, out_dir=None, filename=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
                    vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0,
                    vertex_attack=True, pose_attack=True, lighting_attack=False):
 
-        if out_dir is not None and save_title is None:
+        if out_dir is not None and filename is None:
             raise Exception("Must provide image title if out dir is provided")
-        elif save_title is not None and out_dir is None:
+        elif filename is not None and out_dir is None:
             raise Exception("Must provide directory if image is to be saved")
-
-        filename = save_title
 
         # classify
         img = self.render_image(out_dir=out_dir, filename=filename)
@@ -492,7 +540,7 @@ class SemanticPerturbations:
     
     label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
     out_dir: the directory the image should be saved in (default None; don't change if you don't wish to save the image!)
-    save_title: the image name of the image (e.g. "car_left.png"). Default None
+    filename: the image name of the image (e.g. "car_left.png"). Default None
     steps: an integer that is the number of steps you wish to perform CW for, Default 5.
     vertex_lr: the epsilon for the vertex CW attack. Default 0.001
     pose_lr: the epsilon for the pose CW attack. Default 0.05
@@ -504,16 +552,14 @@ class SemanticPerturbations:
 
     RETURNS: Prediction, 3-channel image
     """
-    def attack_cw(self, label, out_dir=None, save_title=None, steps=5,
+    def attack_cw(self, label, out_dir=None, filename=None, steps=5,
                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
                   vertex_attack=True, pose_attack=True, lighting_attack=False, target=None):
 
-        if out_dir is not None and save_title is None:
+        if out_dir is not None and filename is None:
             raise Exception("Must provide image title if out dir is provided")
-        elif save_title is not None and out_dir is None:
+        elif filename is not None and out_dir is None:
             raise Exception("Must provide directory if image is to be saved")
-
-        filename = save_title
 
         # classify
         img = self.render_image(out_dir=out_dir, filename=filename)
