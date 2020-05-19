@@ -18,6 +18,7 @@ parser.add_argument('--id', type=str, help='The shapenet/imagenet ID of the clas
 parser.add_argument('--hashcode_file', type=str, help='A text file with a list of shapenet hashcodes', required=True)
 parser.add_argument('--label', type=int, help='The label corresponding with your shapenet id', required=True)
 parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right'], default='forward')
+parser.add_argument('--max_iters', type=int, default=5)
 
 args = parser.parse_args()
 
@@ -42,7 +43,7 @@ MAXREQS = 5
 BUFSIZE = 4096
 
 falsifier_params = DotMap()
-falsifier_params.n_iters = MAX_ITERS
+falsifier_params.n_iters = args.max_iters
 falsifier_params.compute_error_table = False
 falsifier_params.save_error_table = False
 falsifier_params.save_safe_table = False
@@ -55,6 +56,8 @@ class confidence_spec(specification_monitor):
         super().__init__(specification)
 
 server_options = DotMap(port=PORT, bufsize=BUFSIZE, maxreqs=MAXREQS)
+
+total_misclassif = 0
 
 for hashcode in hashcodes:
     obj_filename  = '../ShapeNetCore.v2/' + OBJ_ID + '/' + hashcode + '/models/model_normalized.obj'
@@ -74,5 +77,12 @@ for hashcode in hashcodes:
 
     falsifier = generic_falsifier(sampler=sampler, server_options=server_options,
                                 monitor=confidence_spec(), falsifier_params=falsifier_params)
-    falsifier.run_falsifier()
+    rhos = falsifier.run_falsifier()
+    print(rhos)
+    misclassif = np.sum(np.invert(rhos))
+    print('Number of misclassifications:', misclassif)
+    total_misclassif += misclassif
+
+print('Total misclassification rate:', total_misclassif / (len(hashcodes) * MAX_ITERS))
+
 
