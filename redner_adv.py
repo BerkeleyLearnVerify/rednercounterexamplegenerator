@@ -127,6 +127,7 @@ class SemanticPerturbations:
             self.materials.append(value)
 
         self.shapes = []
+        self.shape_dict = {}
         self.cw_shapes = []
         for mtl_name, mesh in mesh_list:
             # assert(mesh.normal_indices is None)
@@ -137,6 +138,7 @@ class SemanticPerturbations:
                 uvs=mesh.uvs,
                 normals=mesh.normals,
                 uv_indices=mesh.uv_indices))
+            self.shape_dict[mtl_name] = self.shapes[-1]
 
         self.camera = pyredner.automatic_camera_placement(self.shapes, resolution=(512, 512))
         # Compute the center of the teapot
@@ -243,10 +245,11 @@ class SemanticPerturbations:
 
 
     # Model the scene based on current instance params
-    def _model(self):
+    def _model(self, no_grad=False):
         # Get the rotation matrix from Euler angles
         rotation_matrix = pyredner.gen_rotate_matrix(self.euler_angles)
-        self.euler_angles.retain_grad()
+        if not no_grad:
+            self.euler_angles.retain_grad()
         # Shift the vertices to the center, apply rotation matrix,
         # shift back to the original space, then apply the translation.
         vertices = []
@@ -254,16 +257,18 @@ class SemanticPerturbations:
             for m, shape in zip(self.modifiers, self.shapes):
                 shape_v = tanh_rescale(torch_arctanh(shape.vertices.clone().detach()) - m.clone().detach() + m)
                 shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
-                shape.vertices.retain_grad()
-                shape.vertices.register_hook(set_grad(shape.vertices))
+                if not no_grad:
+                    shape.vertices.retain_grad()
+                    shape.vertices.register_hook(set_grad(shape.vertices))
                 shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
                 vertices.append(shape.vertices.clone().detach())
         else:
             for shape in self.shapes:
                 shape_v = shape.vertices.clone().detach()
                 shape.vertices = (shape_v - self.center) @ torch.t(rotation_matrix) + self.center + self.translation
-                shape.vertices.retain_grad()
-                shape.vertices.register_hook(set_grad(shape.vertices))
+                if not no_grad:
+                    shape.vertices.retain_grad()
+                    shape.vertices.register_hook(set_grad(shape.vertices))
                 shape.normals = pyredner.compute_vertex_normal(shape.vertices, shape.indices)
                 vertices.append(shape.vertices.clone().detach())
         self.center = torch.mean(torch.cat(vertices), 0)
@@ -278,21 +283,23 @@ class SemanticPerturbations:
     out_dir = the directory you want to save the image in
     filename = the image file name
     """
-    def render_image(self, out_dir=None, filename=None):
+    def render_image(self, out_dir=None, filename=None, no_grad=False):
         if (out_dir is None) is not (filename is None):
             raise Exception("must provide both out dir and filename if you wish to save the image")
+        
+        # We need to do the below to make backprop work right, but if we aren't using gradients then no need.
+        if not no_grad:
+            dummy_img = self._model()
 
-        dummy_img = self._model()
-
-        # honestly dont know if this makes a difference, but...
-        if self.attack_type == "CW":
-            self.euler_angles_modifier.data = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
-            self.euler_angles = tanh_rescale(torch_arctanh(
-                        torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
-        else:
-            self.euler_angles.data = torch.tensor([0., 0., 0.], device=pyredner.get_device(),
-                                                           requires_grad=True)
-        img = self._model()
+            # honestly dont know if this makes a difference, but...
+            if self.attack_type == "CW":
+                self.euler_angles_modifier.data = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
+                self.euler_angles = tanh_rescale(torch_arctanh(
+                         torch.tensor([0., 0., 0.], device=pyredner.get_device())) + self.euler_angles_modifier)
+            else:
+                self.euler_angles.data = torch.tensor([0., 0., 0.], device=pyredner.get_device(),
+                                                                requires_grad=True)
+        img = self._model(no_grad=no_grad)
         # just meant to prevent rotations from being stacked onto one another with the above line
 
         alpha = img[:, :, 3:4]
