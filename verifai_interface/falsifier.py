@@ -13,28 +13,28 @@ from verifai.monitor import specification_monitor
 import numpy as np
 from dotmap import DotMap
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--id', type=str, help='The shapenet/imagenet ID of the class', required=True)
+parser.add_argument('--hashcode_file', type=str, help='A text file with a list of shapenet hashcodes', required=True)
+parser.add_argument('--label', type=int, help='The label corresponding with your shapenet id', required=True)
+parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right'], default='forward')
+
+args = parser.parse_args()
+
 NUM_CLASSES = 12
-OUT_DIR = 'verifai_out'
 BACKGROUND = 'lighting/blue_white.png'
 IMAGENET_FILENAME = 'class_labels.json'
 VGG_PARAMS = {'mean': torch.tensor([0.6109, 0.7387, 0.7765]), 'std': torch.tensor([0.2715, 0.3066, 0.3395])}
 
-# For now we hardcode the object id and hash, and true label 0-11
-OBJ_ID = '02958343'
-HASHCODE = '7ed6fdece737f0118bb11dbc05ffaa74'
-OBJ_FILENAME = '../ShapeNetCore.v2/' + OBJ_ID + '/' + HASHCODE + '/models/model_normalized.obj'
-LABEL = 4
-POSE = 'forward'
+# For now we hardcode the object id and true label 0-11
+OBJ_ID = args.id
+LABEL = args.label
+POSE = args.pose
 
-_, mesh_list, _ = pyredner.load_obj(OBJ_FILENAME)
-
-features = {'euler_delta': Feature(Box([-.3, .3]))}
-for i, name_mesh in enumerate(mesh_list):
-    _, mesh = name_mesh
-    features['mesh' + str(i)] = Feature(Array(Box((-.005, .005)), tuple(mesh.vertices.shape)))
-
-space = FeatureSpace(features)
-sampler = FeatureSampler.randomSamplerFor(space)
+hashcode_file = open(args.hashcode_file, 'r')
+hashcodes = []
+for line in hashcode_file.readlines():
+    hashcodes += [line.strip("\n")]
 
 MAX_ITERS = 5
 PORT = 8888
@@ -51,12 +51,28 @@ falsifier_params.fal_thres = 0.5
 class confidence_spec(specification_monitor):
     def __init__(self):
         def specification(traj):
-            return bool(traj['true'] == traj['pred'])
+            return bool(traj['pred'] == LABEL)
         super().__init__(specification)
 
 server_options = DotMap(port=PORT, bufsize=BUFSIZE, maxreqs=MAXREQS)
 
-falsifier = generic_falsifier(sampler=sampler, server_options=server_options,
-                             monitor=confidence_spec(), falsifier_params=falsifier_params)
-falsifier.run_falsifier()
+for hashcode in hashcodes:
+    obj_filename  = '../ShapeNetCore.v2/' + OBJ_ID + '/' + hashcode + '/models/model_normalized.obj'
+    _, mesh_list, _ = pyredner.load_obj(obj_filename)
+
+    features = {'euler_delta': Feature(Box([-.3, .3]))}
+    for i, name_mesh in enumerate(mesh_list):
+        _, mesh = name_mesh
+        features['mesh' + str(i)] = Feature(Array(Box((-.005, .005)), tuple(mesh.vertices.shape)))
+
+    features['obj_id'] = Feature(Constant(OBJ_ID))
+    features['hashcode'] = Feature(Constant(hashcode))
+    features['pose'] = Feature(Constant(POSE))
+
+    space = FeatureSpace(features)
+    sampler = FeatureSampler.randomSamplerFor(space)
+
+    falsifier = generic_falsifier(sampler=sampler, server_options=server_options,
+                                monitor=confidence_spec(), falsifier_params=falsifier_params)
+    falsifier.run_falsifier()
 

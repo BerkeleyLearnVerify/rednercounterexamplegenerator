@@ -4,24 +4,23 @@ import torchvision.transforms as transforms
 import torchvision.models.vgg as vgg
 import argparse
 import os
+import time
 
 import numpy as np
 from dotmap import DotMap
 
 from verifai.client import Client
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--out', type=str, help='Image output directory.', default='verifai_out')
+
+args = parser.parse_args()
+
 NUM_CLASSES = 12
-OUT_DIR = 'verifai_out'
+OUT_DIR = args.out
 BACKGROUND = 'lighting/blue_white.png'
 IMAGENET_FILENAME = 'class_labels.json'
 VGG_PARAMS = {'mean': torch.tensor([0.6109, 0.7387, 0.7765]), 'std': torch.tensor([0.2715, 0.3066, 0.3395])}
-
-# For now we hardcode the object id and hash, and true label 0-11
-OBJ_ID = '02958343'
-HASHCODE = '7ed6fdece737f0118bb11dbc05ffaa74'
-OBJ_FILENAME = '../ShapeNetCore.v2/' + OBJ_ID + '/' + HASHCODE + '/models/model_normalized.obj'
-LABEL = 4
-POSE = 'forward'
 
 
 class Classifier(Client):
@@ -40,26 +39,30 @@ class Classifier(Client):
         else:
             self.vgg16.load_state_dict(torch.load('torch_models/model_ft.pt'))
 
-        self.vgg_params = {'mean': torch.tensor([0.6109, 0.7387, 0.7765]), 'std': torch.tensor([0.2715, 0.3066, 0.3395])}
+        self.cur_hashcode = None
         self.iters = 0
 
     def simulate(self, sample):
+        # For filename purposes, we reset self.iters to 0 with each new hashcode
+        if not self.cur_hashcode or self.cur_hashcode != sample.hashcode:
+            self.cur_hashcode = sample.hashcode
+            self.iters = 0
+        obj_filename = '../ShapeNetCore.v2/' + sample.obj_id + '/' + sample.hashcode + '/models/model_normalized.obj'
         with torch.no_grad():
-            v = SemanticPerturbations(self.vgg16, OBJ_FILENAME, dims=(224,224), label_names=get_label_names(IMAGENET_FILENAME), 
-                                            normalize_params=VGG_PARAMS, background=BACKGROUND, pose=POSE, num_classes=NUM_CLASSES, attack_type='benign')
-            print('v init')
+            v = SemanticPerturbations(self.vgg16, obj_filename, dims=(224,224), label_names=get_label_names(IMAGENET_FILENAME), 
+                                            normalize_params=VGG_PARAMS, background=BACKGROUND, pose=sample.pose, num_classes=NUM_CLASSES, attack_type='benign')
             v.euler_angles += torch.tensor(sample.euler_delta, device=pyredner.get_device())
             print('eulers added')
             for i in range(len(v.shapes)):
                 v_shape = v.shapes[i].vertices.shape
                 v.shapes[i].vertices += torch.tensor(sample._asdict()['mesh' + str(i)], device=pyredner.get_device()).reshape(v_shape)
             print('vertices added')
-            img = v.render_image(out_dir=OUT_DIR, filename=HASHCODE + '_' + str(self.iters) + '.png', no_grad=True)
+            img = v.render_image(out_dir=OUT_DIR + '/' + sample.obj_id, 
+                    filename=sample.hashcode + '_' + sample.pose + '_' + str(self.iters) + '.png', no_grad=True)
             print('img rendered')
             pred, out = v.classify(img)
             print('forward pass done')
             res = {}
-            res['true'] = LABEL
             res['pred'] = pred
             print(res)
             self.iters += 1
@@ -72,8 +75,15 @@ classifier_data = DotMap()
 classifier_data.port = PORT
 classifier_data.bufsize = BUFSIZE
 client_task = Classifier(classifier_data)
+last_success = time.time()
 while True:
-    if not client_task.run_client():
-        print("End of all classifier calls")
-        break
+    try:
+        client_task.run_client()
+        last_success = time.time()
+    except RuntimeError as e:
+        time.sleep(1)
+        # We assume if the falsifier hasn't sent anything in 60s, we are done.
+        if time.time() - last_success > 60:
+            print('End of all samples.')
+            break
     
