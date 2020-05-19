@@ -11,7 +11,7 @@ parser.add_argument('--hashcode_file', type=str, help="a text file with a list o
 parser.add_argument('--label', type=int)
 parser.add_argument('--target', type=int)
 parser.add_argument('--pose', type=str, choices=['forward', 'top', 'left', 'right', 'all'], default='all')
-parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD', 'CW'])
+parser.add_argument('--attack', type=str, choices=['FGSM', 'PGD', 'CW', 'random'])
 parser.add_argument('--params', type=str, choices=["vertex", "pose", "lighting", "all"], default="all")
 #for vgg16, shape is (224,224)
 
@@ -73,6 +73,8 @@ for hashcode in hashcodes:
         try:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), 
                                         normalize_params=vgg_params, background=background, pose=pose, num_classes=NUM_CLASSES, attack_type=attack_type)
+            # pred, img = v.attack_random_sample(label, out_dir=out_dir, filename=hashcode + '_' + pose + ".png", steps=5, vertex_eps=0.002, pose_eps=0.15, lighting_eps=4000,
+            #                                 vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
             if attack_type is None:
                 v.render_image(out_dir=out_dir, filename=hashcode + '_' + pose + ".png")
                 print("\n\n\n")
@@ -92,6 +94,7 @@ for hashcode in hashcodes:
             elif attack_type == "random":
                 pred, img = v.attack_random_sample(label, out_dir=out_dir, filename=hashcode + '_' + pose + ".png", vertex_eps=0.002, pose_eps=0.15, lighting_eps=4000,
                                             vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
+                # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", img)
             print(pred.item())
             print(label)
             total_errors += (pred.item() != label)

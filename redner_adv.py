@@ -335,7 +335,7 @@ class SemanticPerturbations:
 
         if vertex_attack:
             for shape in self.shapes:
-                shape.vertices += 10 * vertex_eps * torch.rand(shape.vertices.shape) - 5 * vertex_eps
+                shape.vertices.data += 10 * vertex_eps * torch.rand(shape.vertices.shape) - 5 * vertex_eps
 
         if pose_attack:
             self.euler_angles.data += 10 * pose_eps * torch.rand(self.euler_angles.shape) - 5 * pose_eps
@@ -353,10 +353,11 @@ class SemanticPerturbations:
         eps = 1e-6
         img = torch.pow(img + eps, 1.0 / 2.2)  # add .data to stop PyTorch from complaining
         img = torch.nn.functional.interpolate(img.T.unsqueeze(0), size=self.image_dims, mode='bilinear')
-        
+        img = img.permute(0, 1, 3, 2)
         pred, net_out = self.classify(img)
 
         final_image = np.clip(img[0].permute(1, 2, 0).data.cpu().numpy(), 0, 1)
+        
         if out_dir is not None and filename is not None:
             plt.imsave(out_dir + "/" + filename, final_image)
         
