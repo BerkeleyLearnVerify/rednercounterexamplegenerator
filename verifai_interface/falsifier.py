@@ -59,6 +59,7 @@ server_options = DotMap(port=PORT, bufsize=BUFSIZE, maxreqs=MAXREQS)
 
 total_misclassif = 0
 
+falsifier = None
 for hashcode in hashcodes:
     obj_filename  = '../ShapeNetCore.v2/' + OBJ_ID + '/' + hashcode + '/models/model_normalized.obj'
     _, mesh_list, _ = pyredner.load_obj(obj_filename)
@@ -73,10 +74,12 @@ for hashcode in hashcodes:
     features['pose'] = Feature(Constant(POSE))
 
     space = FeatureSpace(features)
-    sampler = FeatureSampler.randomSamplerFor(space)
-
+    halton_params = DotMap()
+    halton_params.sample_index = 0 
+    halton_params.bases_skipped = 0
+    sampler = FeatureSampler.haltonSamplerFor(space, halton_params)
     falsifier = generic_falsifier(sampler=sampler, server_options=server_options,
-                                monitor=confidence_spec(), falsifier_params=falsifier_params)
+                monitor=confidence_spec(), falsifier_params=falsifier_params)
     rhos = falsifier.run_falsifier()
     print(rhos)
     misclassif = np.sum(np.invert(rhos))
