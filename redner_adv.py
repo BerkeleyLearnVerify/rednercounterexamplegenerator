@@ -180,12 +180,12 @@ class SemanticPerturbations:
             elif pose == 'right':
                 self.euler_angles = torch.tensor([0., -0.50, 0.], device=pyredner.get_device(), requires_grad=True)
 
+        self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0], device=pyredner.get_device())
         if attack_type == "CW":
             self.light_input_orig_list = []
             self.light_input_adv_list = []
             delta = 1e-6 # constant for stability
             self.light_modifier = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
-            self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0], device=pyredner.get_device())
             # redner can't accept negative light intensities, so we have to be a bit creative and work with lighting norms instead and then rescale them afterwards...
             tanh_factor = tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals)) + self.light_modifier/torch.norm(self.light_modifier + delta))
             self.light_intensity = torch.norm(self.light_init_vals) * torch.clamp(tanh_factor, 0, 1)
@@ -458,7 +458,8 @@ class SemanticPerturbations:
                 light_sub = self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr
                 light_sub = torch.min(self.light.intensity.data, light_sub) #ensure lighting never goes negative 
                 self.light.intensity.data = torch.min(torch.max(self.light.intensity.data - light_sub, self.light_init_vals - lighting_epsilon), self.light_init_vals + lighting_epsilon)
-
+                print(self.light.intensity.data)
+                
             if pose_attack:
                 self.euler_angles.data -= self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr 
                 self.euler_angles.data = torch.clamp(self.euler_angles.data, -pose_epsilon, pose_epsilon) # euler angles start at 0, so this is fine
