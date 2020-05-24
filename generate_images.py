@@ -82,7 +82,7 @@ for hashcode in hashcodes:
                                             vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", img)
             elif attack_type == "PGD":
-                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_epsilon=5.0, pose_epsilon=0.5, lighting_epsilon=8000,
+                pred, img = v.attack_PGD(label, out_dir=out_dir, save_title=hashcode + '_' + pose + ".png", steps=5, vertex_epsilon=5.0, pose_epsilon=1.50, lighting_epsilon=8000,
                                             vertex_lr=0.01, pose_lr=0.20, lighting_lr=8000, vertex_attack=vertex_attack, pose_attack=pose_attack, lighting_attack=lighting_attack)
                 # plt.imsave(out_dir + "/" + hashcode + '_' + pose + ".png", img)
             elif attack_type == "CW":
