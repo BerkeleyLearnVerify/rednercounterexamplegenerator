@@ -385,8 +385,9 @@ class SemanticPerturbations:
 
     """
     Does a PGD attack on the image to induce misclassification. The attack performed is of the variant in 
-    Carlini & Wagner's 2017 work https://arxiv.org/abs/1608.04644, where clipping occurs after each step.
-    If you want to move away from a specific class, then subtract. 
+    Carlini & Wagner's 2017 work https://arxiv.org/abs/1608.04644. 
+
+    If you want to move away from a specific class, then subtract.
     Else, if you want to move towards a specific class, then add the gradient instead.
     
     label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
@@ -421,6 +422,10 @@ class SemanticPerturbations:
 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles, self.light.intensity], lr=0)
+        original_vertices = []
+        for shape in self.shapes:
+            vertices_clone = shape.vertices.clone().detach()
+            original_vertices += [vertices_clone]
 
         for i in range(steps):
             optimizer.zero_grad()
@@ -437,28 +442,26 @@ class SemanticPerturbations:
 
             if vertex_attack:
                 # attack each shape's vertices
-                for shape in self.shapes:
+                for i in range(len(self.shapes)):
+                    shape = self.shapes[i]
+                    shape_original_vertices = original_vertices[i]
                     if not torch.isfinite(shape.vertices.grad).all():
                         inf_count += 1
                     elif torch.isnan(shape.vertices.grad).any():
                         nan_count += 1
                     else:
                         # subtract because we are trying to decrease the classification score of the label
-                        shape.vertices -= torch.clamp(
-                            shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr,
-                            -vertex_epsilon, vertex_epsilon)
+                        shape.vertices.data -= shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr
+                        shape.vertices.data = torch.min(torch.max(shape.vertices.data, shape_original_vertices.data - vertex_epsilon), shape_original_vertices.data + vertex_epsilon)
 
             if lighting_attack:
-                light_sub = torch.clamp(
-                    self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr, -lighting_epsilon,
-                    lighting_epsilon)
-                light_sub = torch.min(self.light.intensity.data, light_sub)
-                self.light.intensity.data -= light_sub
+                light_sub = self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr
+                light_sub = torch.min(self.light.intensity.data, light_sub) #ensure lighting never goes negative 
+                self.light.intensity.data = torch.min(torch.max(self.light.intensity.data - light_sub, self.light_init_vals - lighting_epsilon), self.light_init_vals + lighting_epsilon)
 
             if pose_attack:
-                self.euler_angles.data -= torch.clamp(
-                    self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr, -pose_epsilon,
-                    pose_epsilon)
+                self.euler_angles.data -= self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr 
+                self.euler_angles.data = torch.clamp(self.euler_angles.data, -pose_epsilon, pose_epsilon) # euler angles start at 0, so this is fine
 
             img = self.render_image(out_dir=out_dir, filename=filename)
 
