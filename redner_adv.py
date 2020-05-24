@@ -384,7 +384,8 @@ class SemanticPerturbations:
         return final_pred, final_image
 
     """
-    Does a PGD attack on the image to induce misclassification. 
+    Does a PGD attack on the image to induce misclassification. The attack performed is of the variant in 
+    Carlini & Wagner's 2017 work https://arxiv.org/abs/1608.04644, where clipping occurs after each step.
     If you want to move away from a specific class, then subtract. 
     Else, if you want to move towards a specific class, then add the gradient instead.
     
