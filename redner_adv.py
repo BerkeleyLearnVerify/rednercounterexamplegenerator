@@ -456,7 +456,7 @@ class SemanticPerturbations:
                         p = torch.max(torch.min(p, vertex_epsilon - vertex_perturbations), -vertex_epsilon + vertex_perturbations)
                         # subtract because we are trying to decrease the classification score of the label
                         shape.vertices.data -= p
-                        vertex_perturbations += p
+                        vertex_perturbations -= p
 
             if lighting_attack:
                 light_sub = self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr
