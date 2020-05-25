@@ -394,7 +394,7 @@ class SemanticPerturbations:
     out_dir: the directory the image should be saved in (leave this as None if you don't wish to save the image!)
     save_title: the image name of the image (e.g. "car_left.png"). Default None
     steps: an integer that is the number of steps you wish to perform PGD for. Default 5
-    vertex_epsilon: the epsilon bound for the vertex PGD attack. Default 1.0
+    vertex_epsilon: the epsilon bound for the vertex PGD attack (i.e. how much you wish to deform individual vertices). Default 1.0
     pose_epsilon: the epsilon bound for the pose PGD attack. Default 1.0
     lighting_epsilon: the epsilon bound for the lighting PGD attack. Default 4000 -- this is due to the intensity scale.
     vertex_lr: the learning rate for the vertex PGD attack. Default 0.001
@@ -407,8 +407,7 @@ class SemanticPerturbations:
     RETURNS: Prediction, 3-channel image
     """
     def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
-                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0,
-                   vertex_attack=True, pose_attack=True, lighting_attack=False):
+                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0, vertex_attack=True, pose_attack=True, lighting_attack=False):
 
         if out_dir is not None and save_title is None:
             raise Exception("Must provide image title if out dir is provided")
@@ -451,7 +450,6 @@ class SemanticPerturbations:
                     elif torch.isnan(shape.vertices.grad).any():
                         nan_count += 1
                     else:
-                        print("hi!")
                         # initial perturbation size
                         p = shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr
                         # ensure the perturbation doesn't exceed the ball of radius epsilon -- if it does, clip it.
@@ -520,8 +518,7 @@ class SemanticPerturbations:
 
     RETURNS: Prediction, 3-channel image
     """
-    def attack_cw(self, label, out_dir=None, save_title=None, steps=5,
-                  vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
+    def attack_cw(self, label, out_dir=None, save_title=None, steps=5, vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
                   vertex_attack=True, pose_attack=True, lighting_attack=False, target=None):
 
         if out_dir is not None and save_title is None:
