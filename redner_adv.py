@@ -335,13 +335,13 @@ class SemanticPerturbations:
 
         if vertex_attack:
             for shape in self.shapes:
-                shape.vertices.data += 10 * vertex_eps * torch.rand(shape.vertices.shape) - 5 * vertex_eps
+                shape.vertices.data += 10 * vertex_eps * torch.rand(shape.vertices.shape).to(pyredner.get_device()) - 5 * vertex_eps
 
         if pose_attack:
-            self.euler_angles.data += 10 * pose_eps * torch.rand(self.euler_angles.shape) - 5 * pose_eps
+            self.euler_angles.data += 10 * pose_eps * torch.rand(self.euler_angles.shape).to(pyredner.get_device()) - 5 * pose_eps
 
         if lighting_attack:
-            self.light_intensity.data += 10 * lighting_eps * torch.rand(self.light_intensity.shape) - 5 * lighting_eps
+            self.light_intensity.data += 10 * lighting_eps * torch.rand(self.light_intensity.shape).to(pyredner.get_device()) - 5 * lighting_eps
         
         img = self._model()
         # just meant to prevent rotations from being stacked onto one another with the above line
@@ -507,7 +507,7 @@ class SemanticPerturbations:
                 self.euler_angles.data -= torch.clamp(
                     self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr, -pose_epsilon,
                     pose_epsilon)
-
+                print(self.euler_angles.data)
             img = self.render_image(out_dir=out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)

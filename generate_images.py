@@ -69,7 +69,7 @@ sample_size = 0
 for hashcode in hashcodes:
     print(hashcode)
     for pose in poses:
-        obj_filename = "../../ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
+        obj_filename = "/home/lakshya/ShapeNetCore.v2/" + obj_id + "/" + hashcode + "/models/model_normalized.obj"
         try:
             v = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=get_label_names(imagenet_filename), 
                                         normalize_params=vgg_params, background=background, pose=pose, num_classes=NUM_CLASSES, attack_type=attack_type)
