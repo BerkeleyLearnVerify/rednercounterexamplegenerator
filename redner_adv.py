@@ -422,10 +422,11 @@ class SemanticPerturbations:
 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles, self.light.intensity], lr=0)
-        perturbations = []
+        angle_perturbations = torch.tensor([0., 0., 0.]).to(pyredner.get_device())
+        vertex_perturbations_lst = []
         for shape in self.shapes:
-            perturbation = torch.zeros(shape.vertices.shape)
-            perturbations += [perturbation]
+            perturbation = torch.zeros(shape.vertices.shape).to(pyredner.get_device())
+            vertex_perturbations_lst += [perturbation]
 
         for i in range(steps):
             optimizer.zero_grad()
@@ -444,7 +445,7 @@ class SemanticPerturbations:
                 # attack each shape's vertices
                 for i in range(len(self.shapes)):
                     shape = self.shapes[i]
-                    vertex_perturbations = perturbations[i]
+                    vertex_perturbations = vertex_perturbations_lst[i]
                     if not torch.isfinite(shape.vertices.grad).all():
                         inf_count += 1
                     elif torch.isnan(shape.vertices.grad).any():
@@ -453,20 +454,25 @@ class SemanticPerturbations:
                         # initial perturbation size
                         p = shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr
                         # ensure the perturbation doesn't exceed the ball of radius epsilon -- if it does, clip it.
-                        p = torch.max(torch.min(p, vertex_epsilon - vertex_perturbations), -vertex_epsilon + vertex_perturbations)
+                        p = torch.min(torch.max(p, vertex_perturbations - vertex_epsilon), vertex_perturbations + vertex_epsilon)
                         # subtract because we are trying to decrease the classification score of the label
                         shape.vertices.data -= p
                         vertex_perturbations -= p
 
             if lighting_attack:
                 light_sub = self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr
-                light_sub = torch.min(self.light.intensity.data, light_sub) #ensure lighting never goes negative 
+                light_sub = torch.min(self.light.intensity.data, light_sub) # ensure lighting never goes negative 
                 self.light.intensity.data = torch.min(torch.max(self.light.intensity.data - light_sub, self.light_init_vals - lighting_epsilon), self.light_init_vals + lighting_epsilon)
                 print(self.light.intensity.data)
 
             if pose_attack:
-                self.euler_angles.data -= self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr 
-                self.euler_angles.data = torch.clamp(self.euler_angles.data, -pose_epsilon, pose_epsilon) # euler angles start at 0, so this is fine
+                # initial perturbation size
+                p = self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr
+                # ensure the perturbation doesn't exceed the ball of radius epsilon -- if it does, clip it.
+                p = torch.min(torch.max(p, angle_perturbations - pose_epsilon), angle_perturbations + pose_epsilon)
+                # subtract because we are trying to decrease the classification score of the label
+                self.euler_angles.data -= p
+                angle_perturbations -= p
 
             img = self.render_image(out_dir=out_dir, filename=filename)
 
