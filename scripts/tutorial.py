@@ -53,5 +53,5 @@ print("\n\n\nPGD attack with 'top' pose\n\n\n")
 cw_right = SemanticPerturbations(vgg16, obj_filename, dims=(224,224), label_names=label_names, 
                           			normalize_params=vgg_retrained_params, background="blue_white.png", pose="top", num_classes=NUM_CLASSES, attack_type="PGD")
 
-pred, img = cw_right.attack_PGD(label=7, out_dir="demo_out/", save_title="motorcycle_demo_forward_pgd.png", steps=5, vertex_epsilon=0.5, pose_epsilon=0.25,
+pred, img = cw_right.attack_PGD(label=7, out_dir="demo_out/", save_title="motorcycle_demo_forward_pgd.png", steps=5, vertex_epsilon=0.5, pose_epsilon=1.20,
                                             vertex_lr=0.01, pose_lr=0.35,pose_attack=True, vertex_attack=True)
