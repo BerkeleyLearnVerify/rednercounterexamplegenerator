@@ -451,12 +451,13 @@ class SemanticPerturbations:
                     elif torch.isnan(shape.vertices.grad).any():
                         nan_count += 1
                     else:
+                        print("hi!")
                         # initial perturbation size
                         p = shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr
                         # ensure the perturbation doesn't exceed the ball of radius epsilon -- if it does, clip it.
                         p = torch.min(torch.max(p, vertex_perturbations - vertex_epsilon), vertex_perturbations + vertex_epsilon)
                         # subtract because we are trying to decrease the classification score of the label
-                        shape.vertices.data -= p
+                        shape.vertices -= p
                         vertex_perturbations -= p
 
             if lighting_attack:
