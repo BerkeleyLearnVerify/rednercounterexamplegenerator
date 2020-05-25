@@ -180,12 +180,12 @@ class SemanticPerturbations:
             elif pose == 'right':
                 self.euler_angles = torch.tensor([0., -0.50, 0.], device=pyredner.get_device(), requires_grad=True)
 
+        self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0], device=pyredner.get_device())
         if attack_type == "CW":
             self.light_input_orig_list = []
             self.light_input_adv_list = []
             delta = 1e-6 # constant for stability
             self.light_modifier = torch.tensor([0., 0., 0.], device=pyredner.get_device(), requires_grad=True)
-            self.light_init_vals = torch.tensor([20000.0, 30000.0, 20000.0], device=pyredner.get_device())
             # redner can't accept negative light intensities, so we have to be a bit creative and work with lighting norms instead and then rescale them afterwards...
             tanh_factor = tanh_rescale(torch_arctanh(self.light_init_vals/torch.norm(self.light_init_vals)) + self.light_modifier/torch.norm(self.light_modifier + delta))
             self.light_intensity = torch.norm(self.light_init_vals) * torch.clamp(tanh_factor, 0, 1)
@@ -435,15 +435,17 @@ class SemanticPerturbations:
         return final_pred, final_image
 
     """
-    Does a PGD attack on the image to induce misclassification. 
-    If you want to move away from a specific class, then subtract. 
+    Does a PGD attack on the image to induce misclassification. The attack performed is of the variant in 
+    Carlini & Wagner's 2017 work https://arxiv.org/abs/1608.04644. 
+
+    If you want to move away from a specific class, then subtract.
     Else, if you want to move towards a specific class, then add the gradient instead.
     
     label: the only required parameter -- this is the index of the class you wish to decrease the network score for.
     out_dir: the directory the image should be saved in (leave this as None if you don't wish to save the image!)
     filename: the image name of the image (e.g. "car_left.png"). Default None
     steps: an integer that is the number of steps you wish to perform PGD for. Default 5
-    vertex_epsilon: the epsilon bound for the vertex PGD attack. Default 1.0
+    vertex_epsilon: the epsilon bound for the vertex PGD attack (i.e. how much you wish to deform individual vertices). Default 1.0
     pose_epsilon: the epsilon bound for the pose PGD attack. Default 1.0
     lighting_epsilon: the epsilon bound for the lighting PGD attack. Default 4000 -- this is due to the intensity scale.
     vertex_lr: the learning rate for the vertex PGD attack. Default 0.001
@@ -455,10 +457,8 @@ class SemanticPerturbations:
 
     RETURNS: Prediction, 3-channel image
     """
-    def attack_PGD(self, label, out_dir=None, filename=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
-                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0,
-                   vertex_attack=True, pose_attack=True, lighting_attack=False):
-
+    def attack_PGD(self, label, out_dir=None, save_title=None, steps=5, vertex_epsilon=1.0, pose_epsilon=1.0, lighting_epsilon=8000.0,
+                   vertex_lr=0.001, pose_lr=0.05, lighting_lr=4000.0, vertex_attack=True, pose_attack=True, lighting_attack=False):
         if out_dir is not None and filename is None:
             raise Exception("Must provide image title if out dir is provided")
         elif filename is not None and out_dir is None:
@@ -469,6 +469,11 @@ class SemanticPerturbations:
 
         # only there to zero out gradients.
         optimizer = torch.optim.Adam([self.translation, self.euler_angles, self.light.intensity], lr=0)
+        angle_perturbations = torch.tensor([0., 0., 0.]).to(pyredner.get_device())
+        vertex_perturbations_lst = []
+        for shape in self.shapes:
+            perturbation = torch.zeros(shape.vertices.shape).to(pyredner.get_device())
+            vertex_perturbations_lst += [perturbation]
 
         for i in range(steps):
             optimizer.zero_grad()
@@ -485,29 +490,37 @@ class SemanticPerturbations:
 
             if vertex_attack:
                 # attack each shape's vertices
-                for shape in self.shapes:
+                for i in range(len(self.shapes)):
+                    shape = self.shapes[i]
+                    vertex_perturbations = vertex_perturbations_lst[i]
                     if not torch.isfinite(shape.vertices.grad).all():
                         inf_count += 1
                     elif torch.isnan(shape.vertices.grad).any():
                         nan_count += 1
                     else:
+                        # initial perturbation size
+                        p = shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr
+                        # ensure the perturbation doesn't exceed the ball of radius epsilon -- if it does, clip it.
+                        p = torch.min(torch.max(p, vertex_perturbations - vertex_epsilon), vertex_perturbations + vertex_epsilon)
                         # subtract because we are trying to decrease the classification score of the label
-                        shape.vertices -= torch.clamp(
-                            shape.vertices.grad / (torch.norm(shape.vertices.grad) + delta) * vertex_lr,
-                            -vertex_epsilon, vertex_epsilon)
+                        shape.vertices -= p
+                        vertex_perturbations -= p
 
             if lighting_attack:
-                light_sub = torch.clamp(
-                    self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr, -lighting_epsilon,
-                    lighting_epsilon)
-                light_sub = torch.min(self.light.intensity.data, light_sub)
-                self.light.intensity.data -= light_sub
+                light_sub = self.light.intensity.grad / (torch.norm(self.light.intensity.grad) + delta) * lighting_lr
+                light_sub = torch.min(self.light.intensity.data, light_sub) # ensure lighting never goes negative 
+                self.light.intensity.data = torch.min(torch.max(self.light.intensity.data - light_sub, self.light_init_vals - lighting_epsilon), self.light_init_vals + lighting_epsilon)
+                print(self.light.intensity.data)
 
             if pose_attack:
-                self.euler_angles.data -= torch.clamp(
-                    self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr, -pose_epsilon,
-                    pose_epsilon)
-                print(self.euler_angles.data)
+                # initial perturbation size
+                p = self.euler_angles.grad / (torch.norm(self.euler_angles.grad) + delta) * pose_lr
+                # ensure the perturbation doesn't exceed the ball of radius epsilon -- if it does, clip it.
+                p = torch.min(torch.max(p, angle_perturbations - pose_epsilon), angle_perturbations + pose_epsilon)
+                # subtract because we are trying to decrease the classification score of the label
+                self.euler_angles.data -= p
+                angle_perturbations -= p
+
             img = self.render_image(out_dir=out_dir, filename=filename)
 
         final_pred, net_out = self.classify(img)
@@ -553,8 +566,7 @@ class SemanticPerturbations:
 
     RETURNS: Prediction, 3-channel image
     """
-    def attack_cw(self, label, out_dir=None, filename=None, steps=5,
-                  vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
+    def attack_cw(self, label, out_dir=None, save_title=None, steps=5, vertex_lr=0.001, pose_lr=0.05, lighting_lr=8000,
                   vertex_attack=True, pose_attack=True, lighting_attack=False, target=None):
 
         if out_dir is not None and filename is None:
