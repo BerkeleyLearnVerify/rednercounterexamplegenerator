@@ -395,7 +395,7 @@ class SemanticPerturbations:
     save_title: the image name of the image (e.g. "car_left.png"). Default None
     steps: an integer that is the number of steps you wish to perform PGD for. Default 5
     vertex_epsilon: the epsilon bound for the vertex PGD attack (i.e. how much you wish to deform individual vertices). Default 1.0
-    pose_epsilon: the epsilon bound for the pose PGD attack. Default 1.0
+    pose_epsilon: the epsilon bound for the pose PGD attack (i.e. maximum rotation in radians). Default 1.0
     lighting_epsilon: the epsilon bound for the lighting PGD attack. Default 4000 -- this is due to the intensity scale.
     vertex_lr: the learning rate for the vertex PGD attack. Default 0.001
     pose_lr: the learning rate for the pose PGD attack. Default 0.05
