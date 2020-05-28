@@ -60,8 +60,6 @@ if attack_type is None:
 else:
     out_dir = "out/" + attack_type + "/" + args.params + "/" + obj_id
 
-#NOTE ANDREW MAKE SURE WE CHANGE THIS BEFORE RUNNING ANY ADV EXAMPLES!!!!!
-#changed!
 vgg_params = {'mean': torch.tensor([0.6109, 0.7387, 0.7765]), 'std': torch.tensor([0.2715, 0.3066, 0.3395])}
 
 total_errors = 0
